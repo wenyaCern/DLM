@@ -13,7 +13,9 @@ class DLM_Random;
 class CATSparameters{
 friend class CATSelder;
 public:
-    enum Type {tSource=3,tPotential=2};
+    enum Type {tSource=3, tSource3D=6, tPotential=2};
+    // tSource   : vars = {k, r, theta}
+    // tSource3D : vars = {qx, qy, qz, x, y, z}
     CATSparameters(const unsigned type, const unsigned numpar, const bool threadsafe);
     CATSparameters(const CATSparameters& other);
     ~CATSparameters();
@@ -346,6 +348,7 @@ public:
     unsigned GetNumOfEl();
     double GetGridSize();
     void Update();
+    void Update3D();
 protected:
     CATSelder* Elder;
     const short Depth;
@@ -359,6 +362,7 @@ protected:
     CATSnode** child;
 
     void Update(const bool& ThisNodeOnly);
+    void Update3D(const bool& ThisNodeOnly);
     void StandardNodeInit(double* mean, double* len, const CATSnode* TemplateNode=NULL);
 };
 
@@ -374,9 +378,9 @@ friend class CATSnode;
 public:
     CATSelder(const short& dim, const short& mindep, const short& maxdep, const double& epsilon,
               //double* mean, double* len, double (CATS::*sfun)(const double*, const double&));
-              double* mean, double* len, void* context, CATSparameters* Pars, int64_t* gbid, const unsigned& numel, const bool& renorm=true);
+              double* mean, double* len, void* context, CATSparameters* Pars, int64_t* gbid, const unsigned& numel, const bool& renorm=true, const bool& isCATS3D=false);
     CATSelder(const CATSelder* TemplateElder,
-              void* context, CATSparameters* Pars, int64_t* gbid, const unsigned& numel, const bool& renorm=true);
+              void* context, CATSparameters* Pars, int64_t* gbid, const unsigned& numel, const bool& renorm=true, const bool& isCATS3D=false);
     void BaseConstructor(double* mean, double* len, void* context, CATSparameters* Pars, int64_t* gbid, const unsigned& numel,
                          const CATSelder* TemplateElder, const bool& renorm=true);
     ~CATSelder();
@@ -398,6 +402,8 @@ public:
 
     void AddEndNode(CATSnode* node);
 
+    bool GetIsCATS3D();
+
 protected:
     const short Dim;
     const short MinDepth;
@@ -408,6 +414,7 @@ protected:
     unsigned MaxNumEndNodes;
     double SourceRenormError;
     unsigned MinEntries;
+    bool IsCATS3D=false;
 
     CATSnode** EndNode;
 
@@ -418,6 +425,7 @@ protected:
     const unsigned NumOfEl;
 
     double SourceFunction(void* context);
+    double SourceFunction3D(void* context);
 
     //CATS* Kitty;
 };

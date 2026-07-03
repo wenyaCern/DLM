@@ -1,0 +1,7 @@
+mT_bin	mT_range_GeV	R_qG_3D	R_qG_3D_err	nu_qG_3D	nu_qG_3D_err	chi2	ndf	chi2_ndf	output_file
+2	0.40-0.50	11.0741	0.0507040	1.62388	0.0766360	327.596	48	6.82492	fit_results_qGaussian_cent10to30_mT2.root
+3	0.50-0.60	11.5172	0.0359767	1.92930	0.0602181	211.141	47	4.49236	fit_results_qGaussian_cent10to30_mT3.root
+4	0.60-0.70	11.2225	0.0377316	1.81167	0.0677578	356.905	47	7.59372	fit_results_qGaussian_cent10to30_mT4.root
+5	0.70-0.90	11.0719	0.0361362	2.13439	0.0973094	538.373	47	11.4547	fit_results_qGaussian_cent10to30_mT5.root
+6	0.90-1.10	10.9334	0.0623535	1.95597	0.137744	913.225	47	19.4303	fit_results_qGaussian_cent10to30_mT6.root
+7	1.10-1.50	9.55187	0.0776788	1.23909	0.134865	118.176	46	2.56904	fit_results_qGaussian_cent10to30_mT7.root

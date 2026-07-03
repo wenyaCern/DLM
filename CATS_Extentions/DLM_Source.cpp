@@ -2301,6 +2301,1629 @@ void DLM_CleverMcLevyResoTM::Init(){
     Histo->AddToAll(1e6);
 }
 
+DLM_CleverMcDoubleGaussResoTM::DLM_CleverMcDoubleGaussResoTM(){
+    NumPtsScale = 128;
+    MinScale = 0.25;
+    MaxScale = 32;
+    NumPtsTailScale = 128;
+    MinTailScale = 1;
+    MaxTailScale = 128;
+    NumPtsCoreFraction = 64;
+    MinCoreFraction = 0;
+    MaxCoreFraction = 1;
+    NumPtsRad = 512;
+    MinRad = 0;
+    MaxRad = 128;
+    Histo = NULL;
+    Type = 1;
+    ResoWeight = new double [2];
+    ResoWeight[0] = 0;
+    ResoWeight[1] = 0;
+    NumMcIter = 1000000;
+    Normalization = 1;
+}
+DLM_CleverMcDoubleGaussResoTM::~DLM_CleverMcDoubleGaussResoTM(){
+    if(Histo) {delete Histo;Histo=NULL;}
+    delete [] ResoWeight; ResoWeight=NULL;
+}
+void DLM_CleverMcDoubleGaussResoTM::InitScale(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsScale==numPts&&MinScale==minVal&&MaxScale==maxVal) return;
+    Reset();
+    NumPtsScale=numPts;
+    MinScale=minVal;
+    MaxScale=maxVal;
+}
+void DLM_CleverMcDoubleGaussResoTM::InitTailScale(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsTailScale==numPts&&MinTailScale==minVal&&MaxTailScale==maxVal) return;
+    Reset();
+    NumPtsTailScale=numPts;
+    MinTailScale=minVal;
+    MaxTailScale=maxVal;
+}
+void DLM_CleverMcDoubleGaussResoTM::InitCoreFraction(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsCoreFraction==numPts&&MinCoreFraction==minVal&&MaxCoreFraction==maxVal) return;
+    Reset();
+    NumPtsCoreFraction=numPts;
+    MinCoreFraction=minVal;
+    MaxCoreFraction=maxVal;
+}
+void DLM_CleverMcDoubleGaussResoTM::InitRad(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsRad==numPts&&MinRad==minVal&&MaxRad==maxVal) return;
+    Reset();
+    NumPtsRad=numPts;
+    MinRad=minVal;
+    MaxRad=maxVal;
+}
+void DLM_CleverMcDoubleGaussResoTM::InitType(const int& type){
+    if(type<0 || type>1) Type = 1;
+    else Type = type;
+}
+void DLM_CleverMcDoubleGaussResoTM::SetUpReso(const unsigned& whichparticle, const double& weight){
+    if(whichparticle>=2) {printf("\033[1;33mWARNING:\033[0m You can call SetUpReso only for particle 0 or 1\n"); return;}
+    if(Histo) Histo->SetBinContentAll(1e6);
+    ResoWeight[whichparticle] = weight;
+}
+void DLM_CleverMcDoubleGaussResoTM::AddBGT_PR(const float& bgt,const float& a_cp){
+    BGT_PR.push_back(std::vector<float>(2));
+    BGT_PR.back()[0] = bgt;
+    BGT_PR.back()[1] = a_cp;
+}
+void DLM_CleverMcDoubleGaussResoTM::AddBGT_RP(const float& bgt,const float& a_cp){
+    BGT_RP.push_back(std::vector<float>(2));
+    BGT_RP.back()[0] = bgt;
+    BGT_RP.back()[1] = a_cp;
+}
+void DLM_CleverMcDoubleGaussResoTM::AddBGT_RR(const float& bgt0,const float& a_cp0,const float& bgt1,const float& a_cp1,const float& a_p0p1){
+    BGT_RR.push_back(std::vector<float>(5));
+    BGT_RR.back()[0] = bgt0;
+    BGT_RR.back()[1] = a_cp0;
+    BGT_RR.back()[2] = bgt1;
+    BGT_RR.back()[3] = a_cp1;
+    BGT_RR.back()[4] = a_p0p1;
+}
+void DLM_CleverMcDoubleGaussResoTM::InitNumMcIter(const unsigned& numiter){
+    if(NumMcIter==numiter) return;
+    if(Histo) Histo->SetBinContentAll(1e6);
+    NumMcIter=numiter;
+}
+void DLM_CleverMcDoubleGaussResoTM::SetNormalization(const double& norm){
+  Normalization = norm;
+}
+double DLM_CleverMcDoubleGaussResoTM::RootEval(double* x, double* Pars){
+    double PARS[6];
+    PARS[1] = *x;
+    PARS[3] = Pars[0];
+    PARS[4] = Pars[1];
+    PARS[5] = Pars[2];
+    return Normalization*Eval(PARS);
+}
+double DLM_CleverMcDoubleGaussResoTM::RootEvalNorm(double* x, double* Pars){
+    double PARS[6];
+    PARS[1] = *x;
+    PARS[3] = Pars[0];
+    PARS[4] = Pars[1];
+    PARS[5] = Pars[2];
+    return Pars[3]*Eval(PARS);
+}
+double DLM_CleverMcDoubleGaussResoTM::Eval(double* Pars){
+    if(!Histo) {Init();}
+    if(!Histo) {return -1; printf("Possible problem in DLM_CleverMcDoubleGaussResoTM::Eval\n");}
+    double& Radius = Pars[1];
+    double& CoreScale = Pars[3];
+    double& TailScale = Pars[4];
+    double CoreFraction = Pars[5];
+    if(CoreFraction<0) CoreFraction = 0;
+    if(CoreFraction>1) CoreFraction = 1;
+
+    const double RSS[4] = {Radius,CoreScale,TailScale,CoreFraction};
+    int CoreBin = Histo->GetBin(1,CoreScale);
+    int TailBin = Histo->GetBin(2,TailScale);
+    int FractionBin = Histo->GetBin(3,CoreFraction);
+    if(CoreBin<0||CoreBin>=int(Histo->GetNbins(1))) {printf("\033[1;33mWARNING!\033[0m A bad core scale parameter passed into DLM_CleverMcDoubleGaussResoTM::Eval\n"); return 0;}
+    if(TailBin<0||TailBin>=int(Histo->GetNbins(2))) {printf("\033[1;33mWARNING!\033[0m A bad tail scale parameter passed into DLM_CleverMcDoubleGaussResoTM::Eval\n"); return 0;}
+    if(FractionBin<0||FractionBin>=int(Histo->GetNbins(3))) {printf("\033[1;33mWARNING!\033[0m A bad core fraction parameter passed into DLM_CleverMcDoubleGaussResoTM::Eval\n"); return 0;}
+
+    unsigned WhichBin[4];
+    double par_core;
+    double par_tail;
+    double par_fraction;
+    WhichBin[0] = 0;
+    for(int iBin1=CoreBin-1; iBin1<=CoreBin+1; iBin1++){
+        if(iBin1<0||iBin1>=int(Histo->GetNbins(1))) continue;
+        WhichBin[1] = iBin1;
+        par_core = Histo->GetBinCenter(1,iBin1);
+        for(int iBin2=TailBin-1; iBin2<=TailBin+1; iBin2++){
+            if(iBin2<0||iBin2>=int(Histo->GetNbins(2))) continue;
+            WhichBin[2] = iBin2;
+            par_tail = Histo->GetBinCenter(2,iBin2);
+            for(int iBin3=FractionBin-1; iBin3<=FractionBin+1; iBin3++){
+                if(iBin3<0||iBin3>=int(Histo->GetNbins(3))) continue;
+                WhichBin[3] = iBin3;
+                par_fraction = Histo->GetBinCenter(3,iBin3);
+                if(par_fraction<0) par_fraction = 0;
+                if(par_fraction>1) par_fraction = 1;
+                if(Histo->GetBinContent(WhichBin)>=0.99e6){
+                    for(unsigned iBin0=0; iBin0<Histo->GetNbins(0); iBin0++){
+                        WhichBin[0] = iBin0;
+                        #pragma omp critical
+                        {
+                        Histo->SetBinContent(WhichBin,0);
+                        }
+                    }
+                    double RAD;
+                    double DiffVal = 1./double(NumMcIter);
+                    double BinSize;
+                    unsigned TotBin;
+                    DLM_Random RanGen(11);
+                    double RanVal;
+                    double BGT[2];BGT[0]=0;BGT[1]=0;
+                    double CosRcP0=0;
+                    double CosRcP1=0;
+                    double CosP0P1=0;
+
+                    for(unsigned uIter=0; uIter<NumMcIter; uIter++){
+                        const double chosen_scale = RanGen.Uniform(0,1)<par_fraction?par_core:par_tail;
+                        if(Type==0) {RAD = RanGen.GaussR(3,0,chosen_scale);}
+                        else {RAD = RanGen.GaussDiffR(3,0,chosen_scale);}
+
+                        bool IsReso[2];
+                        IsReso[0] = false;
+                        IsReso[1] = false;
+                        for(unsigned uParticle=0; uParticle<2; uParticle++){
+                            if(!ResoWeight||!ResoWeight[uParticle]) continue;
+                            RanVal = RanGen.Uniform(0,1);
+                            IsReso[uParticle] = RanVal<ResoWeight[uParticle];
+                        }
+
+                        int RanInt;
+                        if(IsReso[0]&&IsReso[1]){
+                            if(!BGT_RR.empty()){
+                                RanInt = RanGen.Integer(0,int(BGT_RR.size()));
+                                BGT[0] = BGT_RR[RanInt][0];
+                                CosRcP0 = BGT_RR[RanInt][1];
+                                BGT[1] = BGT_RR[RanInt][2];
+                                CosRcP1 = BGT_RR[RanInt][3];
+                                CosP0P1 = BGT_RR[RanInt][4];
+                            }
+                        }
+                        else if(IsReso[0]){
+                            if(!BGT_RP.empty()){
+                                RanInt = RanGen.Integer(0,int(BGT_RP.size()));
+                                BGT[0] = BGT_RP[RanInt][0];
+                                CosRcP0 = BGT_RP[RanInt][1];
+                                BGT[1] = 0;
+                                CosRcP1 = 0;
+                                CosP0P1 = 0;
+                            }
+                        }
+                        else if(IsReso[1]){
+                            if(!BGT_PR.empty()){
+                                RanInt = RanGen.Integer(0,int(BGT_PR.size()));
+                                BGT[0] = 0;
+                                CosRcP0 = 0;
+                                BGT[1] = BGT_PR[RanInt][0];
+                                CosRcP1 = BGT_PR[RanInt][1];
+                                CosP0P1 = 0;
+                            }
+                        }
+                        else{
+                            BGT[0] = 0;
+                            BGT[1] = 0;
+                            CosRcP0 = 0;
+                            CosRcP1 = 0;
+                            CosP0P1 = 0;
+                        }
+
+                        RAD = sqrt(RAD*RAD+BGT[0]*BGT[0]+BGT[1]*BGT[1]
+                                   -2.*RAD*BGT[0]*CosRcP0+2.*RAD*BGT[1]*CosRcP1-2.*BGT[0]*BGT[1]*CosP0P1);
+                        const int RadBin = Histo->GetBin(0,RAD);
+                        if(RadBin<0||RadBin>=int(Histo->GetNbins(0))) continue;
+                        WhichBin[0] = RadBin;
+                        TotBin = Histo->GetTotBin(WhichBin);
+                        BinSize = Histo->GetBinSize(0,WhichBin[0]);
+                        if(Histo->GetBinContent(TotBin)>0.99e6){
+                            Histo->SetBinContent(TotBin,0);
+                        }
+                        if(BinSize!=0) Histo->Add(TotBin,DiffVal/BinSize);
+                    }
+                }
+            }
+        }
+    }
+    return Normalization*Histo->Eval(RSS);
+}
+unsigned DLM_CleverMcDoubleGaussResoTM::GetNumPars(){
+    return 3;
+}
+void DLM_CleverMcDoubleGaussResoTM::Reset(){
+    if(Histo) {delete Histo;Histo=NULL;}
+}
+void DLM_CleverMcDoubleGaussResoTM::Init(){
+    Reset();
+    Histo  = new DLM_Histo<double>();
+    Histo->SetUp(4);
+    if(NumPtsRad==1) {Histo->SetUp(0,NumPtsRad,MinRad,MaxRad);}
+    else{
+        double BinWidth = (MaxRad-MinRad)/double(NumPtsRad-1);
+        Histo->SetUp(0,NumPtsRad,MinRad-BinWidth*0.5,MaxRad+BinWidth*0.5);
+    }
+    if(NumPtsScale==1) {Histo->SetUp(1,NumPtsScale,MinScale,MaxScale);}
+    else{
+        double BinWidth = (MaxScale-MinScale)/double(NumPtsScale-1);
+        Histo->SetUp(1,NumPtsScale,MinScale-BinWidth*0.5,MaxScale+BinWidth*0.5);
+    }
+    if(NumPtsTailScale==1) {Histo->SetUp(2,NumPtsTailScale,MinTailScale,MaxTailScale);}
+    else{
+        double BinWidth = (MaxTailScale-MinTailScale)/double(NumPtsTailScale-1);
+        Histo->SetUp(2,NumPtsTailScale,MinTailScale-BinWidth*0.5,MaxTailScale+BinWidth*0.5);
+    }
+    if(NumPtsCoreFraction==1) {Histo->SetUp(3,NumPtsCoreFraction,MinCoreFraction,MaxCoreFraction);}
+    else{
+        double BinWidth = (MaxCoreFraction-MinCoreFraction)/double(NumPtsCoreFraction-1);
+        Histo->SetUp(3,NumPtsCoreFraction,MinCoreFraction-BinWidth*0.5,MaxCoreFraction+BinWidth*0.5);
+    }
+    Histo->Initialize();
+    Histo->AddToAll(1e6);
+}
+
+DLM_CleverMcNonGaussResoTM::DLM_CleverMcNonGaussResoTM(){
+    NumPtsScale = 128;
+    MinScale = 0.25;
+    MaxScale = 64;
+    NumPtsShape = 128;
+    MinShape = 0.1;
+    MaxShape = 20;
+    NumPtsRad = 512;
+    MinRad = 0;
+    MaxRad = 128;
+    Histo = NULL;
+    Type = 1;
+    SourceShape = ssGammaMixtureQGaussian;
+    ResoWeight = new double [2];
+    ResoWeight[0] = 0;
+    ResoWeight[1] = 0;
+    NumMcIter = 1000000;
+    Normalization = 1;
+}
+DLM_CleverMcNonGaussResoTM::~DLM_CleverMcNonGaussResoTM(){
+    if(Histo) {delete Histo;Histo=NULL;}
+    delete [] ResoWeight; ResoWeight=NULL;
+}
+void DLM_CleverMcNonGaussResoTM::InitScale(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsScale==numPts&&MinScale==minVal&&MaxScale==maxVal) return;
+    Reset();
+    NumPtsScale=numPts;
+    MinScale=minVal;
+    MaxScale=maxVal;
+}
+void DLM_CleverMcNonGaussResoTM::InitShape(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsShape==numPts&&MinShape==minVal&&MaxShape==maxVal) return;
+    Reset();
+    NumPtsShape=numPts;
+    MinShape=minVal;
+    MaxShape=maxVal;
+}
+void DLM_CleverMcNonGaussResoTM::InitRad(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsRad==numPts&&MinRad==minVal&&MaxRad==maxVal) return;
+    Reset();
+    NumPtsRad=numPts;
+    MinRad=minVal;
+    MaxRad=maxVal;
+}
+void DLM_CleverMcNonGaussResoTM::InitType(const int& type){
+    if(type<0 || type>1) Type = 1;
+    else Type = type;
+}
+void DLM_CleverMcNonGaussResoTM::InitSourceShape(const SOURCE_SHAPE& sourceShape){
+    if(SourceShape==sourceShape) return;
+    Reset();
+    SourceShape = sourceShape;
+}
+void DLM_CleverMcNonGaussResoTM::SetUpReso(const unsigned& whichparticle, const double& weight){
+    if(whichparticle>=2) {printf("\033[1;33mWARNING:\033[0m You can call SetUpReso only for particle 0 or 1\n"); return;}
+    if(Histo) Histo->SetBinContentAll(1e6);
+    ResoWeight[whichparticle] = weight;
+}
+void DLM_CleverMcNonGaussResoTM::AddBGT_PR(const float& bgt,const float& a_cp){
+    BGT_PR.push_back(std::vector<float>(2));
+    BGT_PR.back()[0] = bgt;
+    BGT_PR.back()[1] = a_cp;
+}
+void DLM_CleverMcNonGaussResoTM::AddBGT_RP(const float& bgt,const float& a_cp){
+    BGT_RP.push_back(std::vector<float>(2));
+    BGT_RP.back()[0] = bgt;
+    BGT_RP.back()[1] = a_cp;
+}
+void DLM_CleverMcNonGaussResoTM::AddBGT_RR(const float& bgt0,const float& a_cp0,const float& bgt1,const float& a_cp1,const float& a_p0p1){
+    BGT_RR.push_back(std::vector<float>(5));
+    BGT_RR.back()[0] = bgt0;
+    BGT_RR.back()[1] = a_cp0;
+    BGT_RR.back()[2] = bgt1;
+    BGT_RR.back()[3] = a_cp1;
+    BGT_RR.back()[4] = a_p0p1;
+}
+void DLM_CleverMcNonGaussResoTM::InitNumMcIter(const unsigned& numiter){
+    if(NumMcIter==numiter) return;
+    if(Histo) Histo->SetBinContentAll(1e6);
+    NumMcIter=numiter;
+}
+void DLM_CleverMcNonGaussResoTM::SetNormalization(const double& norm){
+  Normalization = norm;
+}
+double DLM_CleverMcNonGaussResoTM::RootEval(double* x, double* Pars){
+    double PARS[5];
+    PARS[1] = *x;
+    PARS[3] = Pars[0];
+    PARS[4] = Pars[1];
+    return Normalization*Eval(PARS);
+}
+double DLM_CleverMcNonGaussResoTM::RootEvalNorm(double* x, double* Pars){
+    double PARS[5];
+    PARS[1] = *x;
+    PARS[3] = Pars[0];
+    PARS[4] = Pars[1];
+    return Pars[2]*Eval(PARS);
+}
+double DLM_CleverMcNonGaussResoTM::SamplePrimordialRadius(DLM_Random& ranGen,
+                                                         const double& sourceScale,
+                                                         const double& sourceShape) const{
+    if(sourceScale<=0) return 0;
+
+    // The CATS 1-D source is a relative source. Start from a 3-D pair
+    // difference radius and then apply the requested non-Gaussian scale
+    // fluctuation to the sampled relative vector magnitude.
+    double sampledRadius = ranGen.GaussDiffR(3,0,sourceScale);
+
+    if(SourceShape==ssLogNormalRadiusMixture){
+        if(sourceShape<=0) return 0;
+        const double scaleFactor = exp(ranGen.Gauss(0,sourceShape));
+        sampledRadius *= scaleFactor;
+    }
+    else if(SourceShape==ssGammaMixtureQGaussian){
+        if(sourceShape<=0) return 0;
+        const double lambda = ranGen.Gamma(0.5*sourceShape,2./sourceShape);
+        if(lambda<=0) return 0;
+        sampledRadius /= sqrt(lambda);
+    }
+
+    return sampledRadius;
+}
+double DLM_CleverMcNonGaussResoTM::Eval(double* Pars){
+    if(!Histo) {Init();}
+    if(!Histo) {return -1; printf("Possible problem in DLM_CleverMcNonGaussResoTM::Eval\n");}
+    double& Radius = Pars[1];
+    double& SourceScale = Pars[3];
+    double& ShapePar = Pars[4];
+
+    const double RSS[3] = {Radius,SourceScale,ShapePar};
+    int ScaleBin = Histo->GetBin(1,SourceScale);
+    int ShapeBin = Histo->GetBin(2,ShapePar);
+    if(ScaleBin<0||ScaleBin>=int(Histo->GetNbins(1))) {printf("\033[1;33mWARNING!\033[0m A bad source scale parameter passed into DLM_CleverMcNonGaussResoTM::Eval\n"); return 0;}
+    if(ShapeBin<0||ShapeBin>=int(Histo->GetNbins(2))) {printf("\033[1;33mWARNING!\033[0m A bad source shape parameter passed into DLM_CleverMcNonGaussResoTM::Eval\n"); return 0;}
+
+    unsigned WhichBin[3];
+    double par_scale;
+    double par_shape;
+    WhichBin[0] = 0;
+    for(int iBin1=ScaleBin-1; iBin1<=ScaleBin+1; iBin1++){
+        if(iBin1<0||iBin1>=int(Histo->GetNbins(1))) continue;
+        WhichBin[1] = iBin1;
+        par_scale = Histo->GetBinCenter(1,iBin1);
+        for(int iBin2=ShapeBin-1; iBin2<=ShapeBin+1; iBin2++){
+            if(iBin2<0||iBin2>=int(Histo->GetNbins(2))) continue;
+            WhichBin[2] = iBin2;
+            par_shape = Histo->GetBinCenter(2,iBin2);
+            if(Histo->GetBinContent(WhichBin)>=0.99e6){
+                for(unsigned iBin0=0; iBin0<Histo->GetNbins(0); iBin0++){
+                    WhichBin[0] = iBin0;
+                    #pragma omp critical
+                    {
+                    Histo->SetBinContent(WhichBin,0);
+                    }
+                }
+                double RAD;
+                double DiffVal = 1./double(NumMcIter);
+                double BinSize;
+                unsigned TotBin;
+                DLM_Random RanGen(11);
+                double RanVal;
+                double BGT[2];BGT[0]=0;BGT[1]=0;
+                double CosRcP0=0;
+                double CosRcP1=0;
+                double CosP0P1=0;
+
+                for(unsigned uIter=0; uIter<NumMcIter; uIter++){
+                    RAD = SamplePrimordialRadius(RanGen,par_scale,par_shape);
+
+                    bool IsReso[2];
+                    IsReso[0] = false;
+                    IsReso[1] = false;
+                    for(unsigned uParticle=0; uParticle<2; uParticle++){
+                        if(!ResoWeight||!ResoWeight[uParticle]) continue;
+                        RanVal = RanGen.Uniform(0,1);
+                        IsReso[uParticle] = RanVal<ResoWeight[uParticle];
+                    }
+
+                    int RanInt;
+                    if(IsReso[0]&&IsReso[1]){
+                        if(!BGT_RR.empty()){
+                            RanInt = RanGen.Integer(0,int(BGT_RR.size()));
+                            BGT[0] = BGT_RR[RanInt][0];
+                            CosRcP0 = BGT_RR[RanInt][1];
+                            BGT[1] = BGT_RR[RanInt][2];
+                            CosRcP1 = BGT_RR[RanInt][3];
+                            CosP0P1 = BGT_RR[RanInt][4];
+                        }
+                    }
+                    else if(IsReso[0]){
+                        if(!BGT_RP.empty()){
+                            RanInt = RanGen.Integer(0,int(BGT_RP.size()));
+                            BGT[0] = BGT_RP[RanInt][0];
+                            CosRcP0 = BGT_RP[RanInt][1];
+                            BGT[1] = 0;
+                            CosRcP1 = 0;
+                            CosP0P1 = 0;
+                        }
+                    }
+                    else if(IsReso[1]){
+                        if(!BGT_PR.empty()){
+                            RanInt = RanGen.Integer(0,int(BGT_PR.size()));
+                            BGT[0] = 0;
+                            CosRcP0 = 0;
+                            BGT[1] = BGT_PR[RanInt][0];
+                            CosRcP1 = BGT_PR[RanInt][1];
+                            CosP0P1 = 0;
+                        }
+                    }
+                    else{
+                        BGT[0] = 0;
+                        BGT[1] = 0;
+                        CosRcP0 = 0;
+                        CosRcP1 = 0;
+                        CosP0P1 = 0;
+                    }
+
+                    RAD = sqrt(RAD*RAD+BGT[0]*BGT[0]+BGT[1]*BGT[1]
+                               -2.*RAD*BGT[0]*CosRcP0+2.*RAD*BGT[1]*CosRcP1-2.*BGT[0]*BGT[1]*CosP0P1);
+                    const int RadBin = Histo->GetBin(0,RAD);
+                    if(RadBin<0||RadBin>=int(Histo->GetNbins(0))) continue;
+                    WhichBin[0] = RadBin;
+                    TotBin = Histo->GetTotBin(WhichBin);
+                    BinSize = Histo->GetBinSize(0,WhichBin[0]);
+                    if(Histo->GetBinContent(TotBin)>0.99e6){
+                        Histo->SetBinContent(TotBin,0);
+                    }
+                    if(BinSize!=0) Histo->Add(TotBin,DiffVal/BinSize);
+                }
+            }
+        }
+    }
+    return Normalization*Histo->Eval(RSS);
+}
+unsigned DLM_CleverMcNonGaussResoTM::GetNumPars(){
+    return 2;
+}
+void DLM_CleverMcNonGaussResoTM::Reset(){
+    if(Histo) {delete Histo;Histo=NULL;}
+}
+void DLM_CleverMcNonGaussResoTM::Init(){
+    Reset();
+    Histo  = new DLM_Histo<double>();
+    Histo->SetUp(3);
+    if(NumPtsRad==1) {Histo->SetUp(0,NumPtsRad,MinRad,MaxRad);}
+    else{
+        double BinWidth = (MaxRad-MinRad)/double(NumPtsRad-1);
+        Histo->SetUp(0,NumPtsRad,MinRad-BinWidth*0.5,MaxRad+BinWidth*0.5);
+    }
+    if(NumPtsScale==1) {Histo->SetUp(1,NumPtsScale,MinScale,MaxScale);}
+    else{
+        double BinWidth = (MaxScale-MinScale)/double(NumPtsScale-1);
+        Histo->SetUp(1,NumPtsScale,MinScale-BinWidth*0.5,MaxScale+BinWidth*0.5);
+    }
+    if(NumPtsShape==1) {Histo->SetUp(2,NumPtsShape,MinShape,MaxShape);}
+    else{
+        double BinWidth = (MaxShape-MinShape)/double(NumPtsShape-1);
+        Histo->SetUp(2,NumPtsShape,MinShape-BinWidth*0.5,MaxShape+BinWidth*0.5);
+    }
+    Histo->Initialize();
+    Histo->AddToAll(1e6);
+}
+
+// A 3-D anisotropic core source projected to 1-D r*. This keeps the ordinary
+// 1-D CATS interface, but the core magnitude is generated from independent
+// signed out/side/long stable components instead of an isotropic StableR(3).
+DLM_CleverMcLevyResoTM_3DTo1D::DLM_CleverMcLevyResoTM_3DTo1D(){
+    Type = 1;
+    ShiftMode = rsmLegacy1D;
+    NumPtsStability = 64;
+    MinStability = 1;
+    MaxStability = 2;
+    NumPtsScale = 64;
+    MinScale = 0.25;
+    MaxScale = 8;
+    NumPtsRad = 512;
+    MinRad = 0;
+    MaxRad = 128;
+    Normalization = 1;
+    ResoWeight[0] = 0;
+    ResoWeight[1] = 0;
+    NumMcIter = 1000000;
+    Histo = NULL;
+}
+
+DLM_CleverMcLevyResoTM_3DTo1D::~DLM_CleverMcLevyResoTM_3DTo1D(){
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::InitStability(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsStability==numPts&&MinStability==minVal&&MaxStability==maxVal) return;
+    Reset();
+    NumPtsStability = numPts;
+    MinStability = minVal;
+    MaxStability = maxVal;
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::InitScale(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsScale==numPts&&MinScale==minVal&&MaxScale==maxVal) return;
+    Reset();
+    NumPtsScale = numPts;
+    MinScale = minVal;
+    MaxScale = maxVal;
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::InitRad(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsRad==numPts&&MinRad==minVal&&MaxRad==maxVal) return;
+    Reset();
+    NumPtsRad = numPts;
+    MinRad = minVal;
+    MaxRad = maxVal;
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::InitType(const int& type){
+    const int safeType = (type<0 || type>2) ? 1 : type;
+    if(Type==safeType) return;
+    Type = safeType;
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::SetShiftMode(const RESO_SHIFT_MODE& mode){
+    if(ShiftMode==mode) return;
+    ShiftMode = mode;
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::SetUpReso(const unsigned& whichparticle, const double& weight){
+    if(whichparticle>=2) {
+        printf("\033[1;33mWARNING:\033[0m You can call SetUpReso only for particle 0 or 1\n");
+        return;
+    }
+    double safeWeight = weight;
+    if(safeWeight<0.) safeWeight = 0.;
+    if(safeWeight>1.) safeWeight = 1.;
+    if(ResoWeight[whichparticle]==safeWeight) return;
+    ResoWeight[whichparticle] = safeWeight;
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::AddBGT_PR(const float& bgt,const float& a_cp){
+    BGT_PR.push_back({bgt,a_cp});
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::AddBGT_RP(const float& bgt,const float& a_cp){
+    BGT_RP.push_back({bgt,a_cp});
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::AddBGT_RR(const float& bgt0,const float& a_cp0,const float& bgt1,const float& a_cp1,const float& a_p0p1){
+    BGT_RR.push_back({bgt0,a_cp0,bgt1,a_cp1,a_p0p1});
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::AddBGT3D_PR(const TVector3& motherMomentumDaughterPRF,
+                                                const double& massMother,
+                                                const double& tauMother,
+                                                const double& oS_dot_oD,
+                                                const double& sS_dot_oD,
+                                                const double& oS_dot_sD,
+                                                const double& sS_dot_sD,
+                                                const double& longScale){
+    BGT3D_PAIR_ENTRY entry;
+    entry.particle0 = {false,TVector3(0,0,0),0.,0.};
+    entry.particle1 = {true,motherMomentumDaughterPRF,massMother,tauMother};
+    entry.oS_dot_oD = oS_dot_oD;
+    entry.sS_dot_oD = sS_dot_oD;
+    entry.oS_dot_sD = oS_dot_sD;
+    entry.sS_dot_sD = sS_dot_sD;
+    entry.longScale = longScale;
+    BGT3D_PR.push_back(entry);
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::AddBGT3D_RP(const TVector3& motherMomentumDaughterPRF,
+                                                const double& massMother,
+                                                const double& tauMother,
+                                                const double& oS_dot_oD,
+                                                const double& sS_dot_oD,
+                                                const double& oS_dot_sD,
+                                                const double& sS_dot_sD,
+                                                const double& longScale){
+    BGT3D_PAIR_ENTRY entry;
+    entry.particle0 = {true,motherMomentumDaughterPRF,massMother,tauMother};
+    entry.particle1 = {false,TVector3(0,0,0),0.,0.};
+    entry.oS_dot_oD = oS_dot_oD;
+    entry.sS_dot_oD = sS_dot_oD;
+    entry.oS_dot_sD = oS_dot_sD;
+    entry.sS_dot_sD = sS_dot_sD;
+    entry.longScale = longScale;
+    BGT3D_RP.push_back(entry);
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::AddBGT3D_RR(const TVector3& motherMomentumDaughterPRF0,
+                                                const double& massMother0,
+                                                const double& tauMother0,
+                                                const TVector3& motherMomentumDaughterPRF1,
+                                                const double& massMother1,
+                                                const double& tauMother1,
+                                                const double& oS_dot_oD,
+                                                const double& sS_dot_oD,
+                                                const double& oS_dot_sD,
+                                                const double& sS_dot_sD,
+                                                const double& longScale){
+    BGT3D_PAIR_ENTRY entry;
+    entry.particle0 = {true,motherMomentumDaughterPRF0,massMother0,tauMother0};
+    entry.particle1 = {true,motherMomentumDaughterPRF1,massMother1,tauMother1};
+    entry.oS_dot_oD = oS_dot_oD;
+    entry.sS_dot_oD = sS_dot_oD;
+    entry.oS_dot_sD = oS_dot_sD;
+    entry.sS_dot_sD = sS_dot_sD;
+    entry.longScale = longScale;
+    BGT3D_RR.push_back(entry);
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::InitNumMcIter(const unsigned& numiter){
+    if(NumMcIter==numiter) return;
+    NumMcIter = numiter;
+    Reset();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::SetNormalization(const double& norm){
+    Normalization = norm;
+}
+
+double DLM_CleverMcLevyResoTM_3DTo1D::RootEval(double* x, double* Pars){
+    double PARS[7] = {0};
+    PARS[1] = *x;
+    PARS[3] = Pars[0];
+    PARS[4] = Pars[1];
+    PARS[5] = Pars[2];
+    PARS[6] = Pars[3];
+    return Normalization*Eval(PARS);
+}
+
+double DLM_CleverMcLevyResoTM_3DTo1D::RootEvalNorm(double* x, double* Pars){
+    double PARS[7] = {0};
+    PARS[1] = *x;
+    PARS[3] = Pars[0];
+    PARS[4] = Pars[1];
+    PARS[5] = Pars[2];
+    PARS[6] = Pars[3];
+    return Pars[4]*Eval(PARS);
+}
+
+double DLM_CleverMcLevyResoTM_3DTo1D::SampleStableComponent1D(DLM_Random& ranGen,
+                                                              const double& stability,
+                                                              const double& scale) const {
+    if(Type==0){
+        return ranGen.Stable(stability,0,scale,0);
+    }
+    else if(Type==1){
+        return ranGen.Stable(stability,0,scale,0) -
+               ranGen.Stable(stability,0,scale,0);
+    }
+
+    const double nolanScale = scale*0.5*stability;
+    return ranGen.Stable(stability,0,nolanScale,0) -
+           ranGen.Stable(stability,0,nolanScale,0);
+}
+
+double DLM_CleverMcLevyResoTM_3DTo1D::ApplyLegacyShift1D(DLM_Random& ranGen,
+                                                         const double& coreMagnitude) const {
+    double BGT[2]; BGT[0]=0; BGT[1]=0;
+    double CosRcP0=0;
+    double CosRcP1=0;
+    double CosP0P1=0;
+
+    bool IsReso[2];
+    IsReso[0] = false;
+    IsReso[1] = false;
+
+    for(unsigned uParticle=0; uParticle<2; uParticle++){
+        if(!ResoWeight[uParticle]) continue;
+        IsReso[uParticle] = ranGen.Uniform(0,1)<ResoWeight[uParticle];
+    }
+
+    if(IsReso[0]&&IsReso[1]){
+        if(!BGT_RR.empty()){
+            const BGT_RR_ENTRY& entry = BGT_RR[ranGen.Integer(0,int(BGT_RR.size()))];
+            BGT[0] = entry.bgt0;
+            CosRcP0 = entry.a_cp0;
+            BGT[1] = entry.bgt1;
+            CosRcP1 = entry.a_cp1;
+            CosP0P1 = entry.a_p0p1;
+        }
+    }
+    else if(IsReso[0]){
+        if(!BGT_RP.empty()){
+            const BGT_PR_ENTRY& entry = BGT_RP[ranGen.Integer(0,int(BGT_RP.size()))];
+            BGT[0] = entry.bgt;
+            CosRcP0 = entry.a_cp;
+        }
+    }
+    else if(IsReso[1]){
+        if(!BGT_PR.empty()){
+            const BGT_PR_ENTRY& entry = BGT_PR[ranGen.Integer(0,int(BGT_PR.size()))];
+            BGT[1] = entry.bgt;
+            CosRcP1 = entry.a_cp;
+        }
+    }
+
+    const double r2 =
+        coreMagnitude*coreMagnitude+BGT[0]*BGT[0]+BGT[1]*BGT[1]
+        -2.*coreMagnitude*BGT[0]*CosRcP0
+        +2.*coreMagnitude*BGT[1]*CosRcP1
+        -2.*BGT[0]*BGT[1]*CosP0P1;
+
+    return r2>0. ? sqrt(r2) : 0.;
+}
+
+TVector3 DLM_CleverMcLevyResoTM_3DTo1D::TransformCoreFromSourceToDaughterPRF(
+    const TVector3& coreVector,
+    const BGT3D_PAIR_ENTRY& entry) const {
+
+    const double rOutSource = coreVector.X();
+    const double rSideSource = coreVector.Y();
+    const double rLongSource = coreVector.Z();
+
+    const double rOutDaughter =
+        rOutSource*entry.oS_dot_oD +
+        rSideSource*entry.sS_dot_oD;
+
+    const double rSideDaughter =
+        rOutSource*entry.oS_dot_sD +
+        rSideSource*entry.sS_dot_sD;
+
+    const double rLongDaughter = rLongSource*entry.longScale;
+
+    return TVector3(rOutDaughter,rSideDaughter,rLongDaughter);
+}
+
+TVector3 DLM_CleverMcLevyResoTM_3DTo1D::PropagationShiftPRF(
+    const ResoParticlePRF& particle) const {
+
+    if(!particle.isResonance) return TVector3(0,0,0);
+    if(particle.massMother<=0. || particle.tauMother<=0.) return TVector3(0,0,0);
+
+    return particle.motherMomentumDaughterPRF*(particle.tauMother/particle.massMother);
+}
+
+TVector3 DLM_CleverMcLevyResoTM_3DTo1D::BuildRstarFromPairPRF(
+    const BGT3D_PAIR_ENTRY& entry,
+    const TVector3& coreVector) const {
+
+    const TVector3 coreDaughterPRF =
+        TransformCoreFromSourceToDaughterPRF(coreVector,entry);
+
+    const TVector3 shift0 = PropagationShiftPRF(entry.particle0);
+    const TVector3 shift1 = PropagationShiftPRF(entry.particle1);
+
+    return coreDaughterPRF - shift0 + shift1;
+}
+
+TVector3 DLM_CleverMcLevyResoTM_3DTo1D::ApplyVectorShift3D(
+    DLM_Random& ranGen,
+    const TVector3& coreVector) const {
+
+    bool IsReso[2];
+    IsReso[0] = false;
+    IsReso[1] = false;
+
+    for(unsigned uParticle=0; uParticle<2; uParticle++){
+        if(!ResoWeight[uParticle]) continue;
+        IsReso[uParticle] = ranGen.Uniform(0,1)<ResoWeight[uParticle];
+    }
+
+    if(IsReso[0]&&IsReso[1]){
+        if(!BGT3D_RR.empty()){
+            const BGT3D_PAIR_ENTRY& entry = BGT3D_RR[ranGen.Integer(0,int(BGT3D_RR.size()))];
+            return BuildRstarFromPairPRF(entry,coreVector);
+        }
+    }
+    else if(IsReso[0]){
+        if(!BGT3D_RP.empty()){
+            const BGT3D_PAIR_ENTRY& entry = BGT3D_RP[ranGen.Integer(0,int(BGT3D_RP.size()))];
+            return BuildRstarFromPairPRF(entry,coreVector);
+        }
+    }
+    else if(IsReso[1]){
+        if(!BGT3D_PR.empty()){
+            const BGT3D_PAIR_ENTRY& entry = BGT3D_PR[ranGen.Integer(0,int(BGT3D_PR.size()))];
+            return BuildRstarFromPairPRF(entry,coreVector);
+        }
+    }
+
+    return coreVector;
+}
+
+DLM_Histo<double>* DLM_CleverMcLevyResoTM_3DTo1D::MakeRadialHisto(const double& scaleOut,
+                                                                  const double& scaleSide,
+                                                                  const double& scaleLong,
+                                                                  const double& stability) const {
+    DLM_Histo<double>* radialHisto = new DLM_Histo<double>();
+    radialHisto->SetUp(1);
+    if(NumPtsRad==1) {radialHisto->SetUp(0,NumPtsRad,MinRad,MaxRad);}
+    else{
+        const double BinWidth = (MaxRad-MinRad)/double(NumPtsRad-1);
+        radialHisto->SetUp(0,NumPtsRad,MinRad-BinWidth*0.5,MaxRad+BinWidth*0.5);
+    }
+    radialHisto->Initialize();
+    radialHisto->AddToAll(0);
+
+    unsigned WhichBin[1];
+    const double DiffVal = 1./double(NumMcIter);
+    DLM_Random RanGen(11);
+    for(unsigned uIter=0; uIter<NumMcIter; uIter++){
+        const double rOut = SampleStableComponent1D(RanGen,stability,scaleOut);
+        const double rSide = SampleStableComponent1D(RanGen,stability,scaleSide);
+        const double rLong = SampleStableComponent1D(RanGen,stability,scaleLong);
+
+        const TVector3 coreVector(rOut,rSide,rLong);
+        double RAD = 0.;
+        if(ShiftMode==rsmVector3D){
+            RAD = ApplyVectorShift3D(RanGen,coreVector).Mag();
+        }
+        else{
+            RAD = ApplyLegacyShift1D(RanGen,coreVector.Mag());
+        }
+
+        const int RadBin = radialHisto->GetBin(0,RAD);
+        if(RadBin<0||RadBin>=int(radialHisto->GetNbins(0))) continue;
+
+        WhichBin[0] = unsigned(RadBin);
+        const unsigned TotBin = radialHisto->GetTotBin(WhichBin);
+        const double BinSize = radialHisto->GetBinSize(0,WhichBin[0]);
+        if(BinSize!=0) radialHisto->Add(TotBin,DiffVal/BinSize);
+    }
+
+    return radialHisto;
+}
+
+DLM_Histo<double>* DLM_CleverMcLevyResoTM_3DTo1D::GetCachedRadialHisto(const double& scaleOut,
+                                                                       const double& scaleSide,
+                                                                       const double& scaleLong,
+                                                                       const double& stability) {
+    const double scaleTol = NumPtsScale>1 ? 0.5*(MaxScale-MinScale)/double(NumPtsScale-1) : 1e-9;
+    const double stabilityTol = NumPtsStability>1 ? 0.5*(MaxStability-MinStability)/double(NumPtsStability-1) : 1e-9;
+
+    for(unsigned uEntry=0; uEntry<SourceCache.size(); uEntry++){
+        SOURCE_CACHE_ENTRY& entry = SourceCache[uEntry];
+        if(fabs(entry.scaleOut-scaleOut)<=scaleTol &&
+           fabs(entry.scaleSide-scaleSide)<=scaleTol &&
+           fabs(entry.scaleLong-scaleLong)<=scaleTol &&
+           fabs(entry.stability-stability)<=stabilityTol){
+            return entry.radialHisto;
+        }
+    }
+
+    SOURCE_CACHE_ENTRY newEntry;
+    newEntry.scaleOut = scaleOut;
+    newEntry.scaleSide = scaleSide;
+    newEntry.scaleLong = scaleLong;
+    newEntry.stability = stability;
+    newEntry.radialHisto = MakeRadialHisto(scaleOut,scaleSide,scaleLong,stability);
+    SourceCache.push_back(newEntry);
+    return SourceCache.back().radialHisto;
+}
+
+double DLM_CleverMcLevyResoTM_3DTo1D::Eval(double* Pars){
+    double& Radius = Pars[1];
+    double& ScaleOut = Pars[3];
+    double& ScaleSide = Pars[4];
+    double& ScaleLong = Pars[5];
+    double& Stability = Pars[6];
+
+    if(ScaleOut<MinScale||ScaleOut>MaxScale) {printf("\033[1;33mWARNING!\033[0m A bad Rout parameter passed into DLM_CleverMcLevyResoTM_3DTo1D::Eval\n"); return 0;}
+    if(ScaleSide<MinScale||ScaleSide>MaxScale) {printf("\033[1;33mWARNING!\033[0m A bad Rside parameter passed into DLM_CleverMcLevyResoTM_3DTo1D::Eval\n"); return 0;}
+    if(ScaleLong<MinScale||ScaleLong>MaxScale) {printf("\033[1;33mWARNING!\033[0m A bad Rlong parameter passed into DLM_CleverMcLevyResoTM_3DTo1D::Eval\n"); return 0;}
+    if(Stability<MinStability||Stability>MaxStability) {printf("\033[1;33mWARNING!\033[0m A bad stability parameter passed into DLM_CleverMcLevyResoTM_3DTo1D::Eval\n"); return 0;}
+
+    DLM_Histo<double>* radialHisto = GetCachedRadialHisto(ScaleOut,ScaleSide,ScaleLong,Stability);
+    if(!radialHisto) return 0;
+
+    double radiusValue[1] = {Radius};
+    return Normalization*radialHisto->Eval(radiusValue);
+}
+
+unsigned DLM_CleverMcLevyResoTM_3DTo1D::GetNumPars(){
+    return 4;
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::Reset(){
+    if(Histo) {delete Histo;Histo=NULL;}
+    for(unsigned uEntry=0; uEntry<SourceCache.size(); uEntry++){
+        if(SourceCache[uEntry].radialHisto) delete SourceCache[uEntry].radialHisto;
+    }
+    SourceCache.clear();
+}
+
+void DLM_CleverMcLevyResoTM_3DTo1D::Init(){
+    Reset();
+}
+
+// Added new member of source class, resonance contribution, 3D
+DLM_CleverReso3D::DLM_CleverReso3D()
+: Type(1)
+, NumPtsStability(64)
+, NumPtsScale(128)
+, NumPtsRad(81)
+, MinStability(1.0)
+, MaxStability(2.0)
+, MinScale(0.25)
+, MaxScale(4.0)
+, MinRad(-64.0)
+, MaxRad(64.0)
+, Normalization(1.0)
+, NumMcIter(1000000)
+, UseLCMS(true)
+, UseModelCore(false)
+, DebugMode(false)
+, MaxCacheEntries(8)
+, CacheClock(0)
+, CacheTolerance(1e-8)
+, Histo(nullptr)
+{
+    // Backward-compatible default: if SetUpReso is not called, the class
+    // behaves like the first RR-only implementation and treats both particles
+    // as resonance daughters.
+    ResoWeight[0] = 1.;
+    ResoWeight[1] = 1.;
+    PairInput_RR.clear();
+    PairInput_PR.clear();
+    PairInput_RP.clear();
+    SourceCache.clear();
+}
+
+DLM_CleverReso3D::~DLM_CleverReso3D(){
+    Reset();
+}
+
+double DLM_CleverReso3D::RootEval(double* x, double* Pars){
+    double PARS[10] = {};
+    PARS[3] = x[0];
+    PARS[4] = x[1];
+    PARS[5] = x[2];
+    PARS[6] = Pars[0];
+    PARS[7] = Pars[1];
+    PARS[8] = Pars[2];
+    return Eval(PARS);
+}
+
+double DLM_CleverReso3D::RootEvalNorm(double* x, double* Pars){
+    double PARS[10] = {};
+    PARS[3] = x[0];
+    PARS[4] = x[1];
+    PARS[5] = x[2];
+    PARS[6] = Pars[0];
+    PARS[7] = Pars[1];
+    PARS[8] = Pars[2];
+    if(Normalization==0.) return 0.;
+    return Pars[3]*Eval(PARS)/Normalization;
+}
+
+void DLM_CleverReso3D::InitStability(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsStability==numPts&&MinStability==minVal&&MaxStability==maxVal) return;
+    NumPtsStability = numPts;
+    MinStability = minVal;
+    MaxStability = maxVal;
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::InitScale(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsScale==numPts&&MinScale==minVal&&MaxScale==maxVal) return;
+    NumPtsScale = numPts;
+    MinScale = minVal;
+    MaxScale = maxVal;
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::InitRad(const unsigned& numPts, const double& minVal, const double& maxVal){
+    if(NumPtsRad==numPts&&MinRad==minVal&&MaxRad==maxVal) return;
+    NumPtsRad = numPts;
+    MinRad = minVal;
+    MaxRad = maxVal;
+    Reset();
+}
+
+void DLM_CleverReso3D::InitType(const int& type){
+    if(Type==type) return;
+    Type = type;
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::InitNumMcIter(const unsigned& numiter){
+    if(NumMcIter==numiter) return;
+    NumMcIter = numiter;
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::SetNormalization(const double& norm){
+    Normalization = norm;
+}
+
+void DLM_CleverReso3D::SetUpReso(const unsigned& whichparticle, const double& weight){
+    if(whichparticle>=2) {
+        printf("\033[1;33mWARNING:\033[0m You can call DLM_CleverReso3D::SetUpReso only for particle 0 or 1\n");
+        return;
+    }
+    double safeWeight = weight;
+    if(safeWeight<0.) safeWeight = 0.;
+    if(safeWeight>1.) safeWeight = 1.;
+    if(ResoWeight[whichparticle]==safeWeight) return;
+    ResoWeight[whichparticle] = safeWeight;
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::ClearKinematics(){
+    PairInput_RR.clear();
+    PairInput_PR.clear();
+    PairInput_RP.clear();
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::ReservePairs(const unsigned& nPairs){
+    PairInput_RR.reserve(nPairs);
+}
+
+void DLM_CleverReso3D::ReservePairs_PR(const unsigned& nPairs){
+    PairInput_PR.reserve(nPairs);
+}
+
+void DLM_CleverReso3D::ReservePairs_RP(const unsigned& nPairs){
+    PairInput_RP.reserve(nPairs);
+}
+
+void DLM_CleverReso3D::AddPairKinematics(const ResoPair3D& pair){
+    PairInput_RR.push_back(pair);
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::AddPairKinematics_PR(const ResoPair3D& pair){
+    PairInput_PR.push_back(pair);
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::AddPairKinematics_RP(const ResoPair3D& pair){
+    PairInput_RP.push_back(pair);
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::AddBGT_RR(const TVector3& mother1MomentumDauLCMS,
+                                 const double& massMother1,
+                                 const double& tauMother1,
+                                 const TVector3& mother2MomentumDauLCMS,
+                                 const double& massMother2,
+                                 const double& tauMother2,
+                                 const double& oS_dot_oD,
+                                 const double& sS_dot_oD,
+                                 const double& oS_dot_sD,
+                                 const double& sS_dot_sD,
+                                 const double& longScale){
+    ResoPair3D pair;
+
+    pair.Part1.IsResonance = true;
+    pair.Part1.MotherMomentumDauLCMS = mother1MomentumDauLCMS;
+    pair.Part1.MassMother = massMother1;
+    pair.Part1.Tau = tauMother1;
+
+    pair.Part2.IsResonance = true;
+    pair.Part2.MotherMomentumDauLCMS = mother2MomentumDauLCMS;
+    pair.Part2.MassMother = massMother2;
+    pair.Part2.Tau = tauMother2;
+
+    pair.oS_dot_oD = oS_dot_oD;
+    pair.sS_dot_oD = sS_dot_oD;
+    pair.oS_dot_sD = oS_dot_sD;
+    pair.sS_dot_sD = sS_dot_sD;
+    pair.LongScale = longScale;
+
+    AddPairKinematics(pair);
+}
+
+void DLM_CleverReso3D::AddBGT_PR(const TVector3& mother2MomentumDauLCMS,
+                                 const double& massMother2,
+                                 const double& tauMother2,
+                                 const double& oS_dot_oD,
+                                 const double& sS_dot_oD,
+                                 const double& oS_dot_sD,
+                                 const double& sS_dot_sD,
+                                 const double& longScale){
+    ResoPair3D pair;
+
+    // Canonical PR ordering: particle 1 is the primary pion and particle 2 is
+    // the resonance daughter. Only particle 2 receives a propagation shift.
+    pair.Part1.IsResonance = false;
+
+    pair.Part2.IsResonance = true;
+    pair.Part2.MotherMomentumDauLCMS = mother2MomentumDauLCMS;
+    pair.Part2.MassMother = massMother2;
+    pair.Part2.Tau = tauMother2;
+
+    pair.oS_dot_oD = oS_dot_oD;
+    pair.sS_dot_oD = sS_dot_oD;
+    pair.oS_dot_sD = oS_dot_sD;
+    pair.sS_dot_sD = sS_dot_sD;
+    pair.LongScale = longScale;
+
+    AddPairKinematics_PR(pair);
+}
+
+void DLM_CleverReso3D::AddBGT_RP(const TVector3& mother1MomentumDauLCMS,
+                                 const double& massMother1,
+                                 const double& tauMother1,
+                                 const double& oS_dot_oD,
+                                 const double& sS_dot_oD,
+                                 const double& oS_dot_sD,
+                                 const double& sS_dot_sD,
+                                 const double& longScale){
+    ResoPair3D pair;
+
+    // Mirror of AddBGT_PR: particle 1 is the resonance daughter and particle 2
+    // is the primary pion. Only particle 1 receives a propagation shift.
+    pair.Part1.IsResonance = true;
+    pair.Part1.MotherMomentumDauLCMS = mother1MomentumDauLCMS;
+    pair.Part1.MassMother = massMother1;
+    pair.Part1.Tau = tauMother1;
+
+    pair.Part2.IsResonance = false;
+
+    pair.oS_dot_oD = oS_dot_oD;
+    pair.sS_dot_oD = sS_dot_oD;
+    pair.oS_dot_sD = oS_dot_sD;
+    pair.sS_dot_sD = sS_dot_sD;
+    pair.LongScale = longScale;
+
+    AddPairKinematics_RP(pair);
+}
+
+void DLM_CleverReso3D::SetUseLCMS(const bool& val){
+    UseLCMS = val;
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::SetUseModelCore(const bool& val){
+    UseModelCore = val;
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::SetDebugMode(const bool& val){
+    DebugMode = val;
+}
+
+unsigned DLM_CleverReso3D::GetNumPars(){
+    return 4;
+}
+
+void DLM_CleverReso3D::Reset(){
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::Init(){
+    // Histograms are created lazily by GetSourceHisto3D().
+    // Keeping Init() as a cache reset preserves the old public behavior:
+    // changing the radial grid invalidates all already sampled sources.
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::ClearSourceCache(){
+    for(unsigned uEntry=0; uEntry<SourceCache.size(); uEntry++){
+        if(SourceCache[uEntry].Histo){
+            delete SourceCache[uEntry].Histo;
+            SourceCache[uEntry].Histo = nullptr;
+        }
+    }
+    SourceCache.clear();
+    Histo = nullptr;
+    CacheClock = 0;
+}
+
+DLM_Histo<double>* DLM_CleverReso3D::CreateEmptySourceHisto3D() const {
+    DLM_Histo<double>* histo = new DLM_Histo<double>();
+    histo->SetUp(3);
+    if(NumPtsRad==1) {
+        histo->SetUp(0,NumPtsRad,MinRad,MaxRad);
+        histo->SetUp(1,NumPtsRad,MinRad,MaxRad);
+        histo->SetUp(2,NumPtsRad,MinRad,MaxRad);
+    }
+    else{
+        double BinWidth = (MaxRad-MinRad)/double(NumPtsRad-1);
+        histo->SetUp(0,NumPtsRad,MinRad-BinWidth*0.5,MaxRad+BinWidth*0.5);
+        histo->SetUp(1,NumPtsRad,MinRad-BinWidth*0.5,MaxRad+BinWidth*0.5);
+        histo->SetUp(2,NumPtsRad,MinRad-BinWidth*0.5,MaxRad+BinWidth*0.5);
+    }
+    histo->Initialize();
+    histo->AddToAll(0.);
+    return histo;
+}
+
+DLM_Histo<double>* DLM_CleverReso3D::BuildSourceHisto3D(const double& scaleOut,
+                                                        const double& scaleSide,
+                                                        const double& scaleLong,
+                                                        const double& stability) const {
+    DLM_Histo<double>* sourceHisto = CreateEmptySourceHisto3D();
+    if(!sourceHisto) return nullptr;
+
+    // This is the direct 3-D analogue of the lazy histogram construction in
+    // DLM_CleverMcLevyResoTM::Eval. The TM source fills S(r*;R,alpha) on a
+    // (r*,R,alpha) grid. Here the source query is genuinely 3-D, so the full
+    // equivalent would be S(rOut*,rSide*,rLong*;Rout,Rside,Rlong,alpha).
+    // That 6-D/7-D object is too large for routine fits, therefore each cache
+    // entry stores only one 3-D histogram for one visited source-parameter
+    // point. The minimizer can still revisit nearby/identical points cheaply,
+    // while the memory footprint stays controlled.
+    //
+    // EPOS is not sampled or decoded here. PairInput_RR and PairInput_PR are
+    // the external kinematic kernel pools, exactly like the BGT arrays in the
+    // TM class. Every MC throw draws one Gaussian core vector, throws two
+    // resonance dice controlled by ResoWeight[0/1], selects PP/PR/RP/RR, and
+    // maps the core separation forward into daughter LCMS r*. The PR EPOS pool
+    // is stored in canonical order (particle 1 primary, particle 2 resonance).
+    // If a dedicated RP pool is not supplied, RP is obtained internally by
+    // swapping the canonical PR particle identities.
+    DLM_Random RanGen(11);
+    const double DiffVal = 1./double(NumMcIter);
+    unsigned WhichBin[3];
+
+    for(unsigned uIter=0; uIter<NumMcIter; uIter++){
+        TVector3 rCoreSouLCMS =
+            SampleCoreVector3D(scaleOut, scaleSide, scaleLong, stability, RanGen);
+
+        ResoPair3D pair;
+        bool useExternalKernel = false;
+        const bool hasPairKernel =
+            DrawKernelPair(RanGen, pair, useExternalKernel);
+
+        TVector3 rStar;
+        if(hasPairKernel && useExternalKernel){
+            rStar = BuildRstarFromPair(pair, rCoreSouLCMS, RanGen);
+        }
+        else{
+            rStar = BuildRstarFromPrimaryPrimary(rCoreSouLCMS);
+        }
+
+        const unsigned BinOut = sourceHisto->GetBin(0,rStar.X());
+        const unsigned BinSide = sourceHisto->GetBin(1,rStar.Y());
+        const unsigned BinLong = sourceHisto->GetBin(2,rStar.Z());
+
+        if(BinOut>=sourceHisto->GetNbins(0)) continue;
+        if(BinSide>=sourceHisto->GetNbins(1)) continue;
+        if(BinLong>=sourceHisto->GetNbins(2)) continue;
+
+        WhichBin[0] = BinOut;
+        WhichBin[1] = BinSide;
+        WhichBin[2] = BinLong;
+
+        // Store a density, not just raw counts. This matches the TM class,
+        // which divides by the r-bin width after each MC contribution. In 3-D
+        // the corresponding measure is the Cartesian bin volume
+        // drOut*drSide*drLong.
+        const double BinVolume =
+            sourceHisto->GetBinSize(0,WhichBin[0]) *
+            sourceHisto->GetBinSize(1,WhichBin[1]) *
+            sourceHisto->GetBinSize(2,WhichBin[2]);
+
+        if(BinVolume<=0.) continue;
+        const unsigned TotBin = sourceHisto->GetTotBin(WhichBin);
+        sourceHisto->Add(TotBin,DiffVal/BinVolume);
+    }
+
+    return sourceHisto;
+}
+
+bool DLM_CleverReso3D::SameCachePoint(const SourceCacheEntry3D& entry,
+                                      const double& scaleOut,
+                                      const double& scaleSide,
+                                      const double& scaleLong,
+                                      const double& stability) const {
+    // The cache key is the fit point (Rout,Rside,Rlong). The tolerance is kept
+    // very small: it catches repeated floating-point values from a minimizer,
+    // but does not intentionally quantize the fit surface.
+    const double tolOut = CacheTolerance*(1.+fabs(scaleOut));
+    const double tolSide = CacheTolerance*(1.+fabs(scaleSide));
+    const double tolLong = CacheTolerance*(1.+fabs(scaleLong));
+    const double tolStability = NumPtsStability>1 ?
+        0.5*(MaxStability-MinStability)/double(NumPtsStability-1) : 1e-9;
+    return fabs(entry.ScaleOut-scaleOut)<=tolOut &&
+           fabs(entry.ScaleSide-scaleSide)<=tolSide &&
+           fabs(entry.ScaleLong-scaleLong)<=tolLong &&
+           fabs(entry.Stability-stability)<=tolStability;
+}
+
+DLM_Histo<double>* DLM_CleverReso3D::GetSourceHisto3D(const double& scaleOut,
+                                                      const double& scaleSide,
+                                                      const double& scaleLong,
+                                                      const double& stability) {
+    CacheClock++;
+
+    for(unsigned uEntry=0; uEntry<SourceCache.size(); uEntry++){
+        if(SameCachePoint(SourceCache[uEntry], scaleOut, scaleSide, scaleLong, stability)){
+            SourceCache[uEntry].LastUsed = CacheClock;
+            Histo = SourceCache[uEntry].Histo;
+            return Histo;
+        }
+    }
+
+    DLM_Histo<double>* newHisto = BuildSourceHisto3D(scaleOut, scaleSide, scaleLong, stability);
+    if(!newHisto) return nullptr;
+
+    SourceCacheEntry3D newEntry;
+    newEntry.ScaleOut = scaleOut;
+    newEntry.ScaleSide = scaleSide;
+    newEntry.ScaleLong = scaleLong;
+    newEntry.Stability = stability;
+    newEntry.LastUsed = CacheClock;
+    newEntry.Histo = newHisto;
+
+    if(!MaxCacheEntries){
+        delete newHisto;
+        Histo = nullptr;
+        return nullptr;
+    }
+
+    if(SourceCache.size()<MaxCacheEntries){
+        SourceCache.push_back(newEntry);
+        Histo = newEntry.Histo;
+        return Histo;
+    }
+
+    // Local LRU cache: fits often step around a small region of parameter
+    // space. Keeping the most recently used source histograms avoids rebuilding
+    // them when the minimizer returns to a previous point, while preventing the
+    // full TM-like multidimensional cache from growing without bound.
+    unsigned EvictEntry = 0;
+    for(unsigned uEntry=1; uEntry<SourceCache.size(); uEntry++){
+        if(SourceCache[uEntry].LastUsed<SourceCache[EvictEntry].LastUsed){
+            EvictEntry = uEntry;
+        }
+    }
+
+    if(SourceCache[EvictEntry].Histo){
+        delete SourceCache[EvictEntry].Histo;
+    }
+    SourceCache[EvictEntry] = newEntry;
+    Histo = newEntry.Histo;
+    return Histo;
+}
+
+TVector3 DLM_CleverReso3D::SampleCoreVector3D(const double& scaleOut,
+                                              const double& scaleSide,
+                                              const double& scaleLong,
+                                              const double& stability,
+                                              DLM_Random& ranGen) const {
+    auto sampleStable = [&ranGen, &stability](const double& scale) {
+        if(stability==2.) return ranGen.Gauss(0.,scale);
+        return ranGen.Stable(stability,0.,scale,0.);
+    };
+    auto sampleDiffStable = [&ranGen, &stability](const double& scale) {
+        if(stability==2.) {
+            return ranGen.Gauss(0.,scale) - ranGen.Gauss(0.,scale);
+        }
+        return ranGen.Stable(stability,0.,scale,0.) -
+               ranGen.Stable(stability,0.,scale,0.);
+    };
+
+    if(Type==0){
+        return TVector3(sampleStable(scaleOut),
+                        sampleStable(scaleSide),
+                        sampleStable(scaleLong));
+    }
+
+    return TVector3(sampleDiffStable(scaleOut),
+                    sampleDiffStable(scaleSide),
+                    sampleDiffStable(scaleLong));
+}
+
+TVector3 DLM_CleverReso3D::PropagationShiftInLCMS(const ResoParticle3D& part,
+                                                  DLM_Random& ranGen) const {
+    if(!part.IsResonance) return TVector3(0,0,0);
+    if(part.MassMother<=0.) return TVector3(0,0,0);
+    if(part.Tau<=0.) return TVector3(0,0,0);
+
+    const double momentum = part.MotherMomentumDauLCMS.Mag();
+    if(momentum<=0.) return TVector3(0,0,0);
+
+    const double lambda = part.MassMother/(momentum*part.Tau);
+    const double decayLength = ranGen.Exponential(lambda);
+    return part.MotherMomentumDauLCMS.Unit()*decayLength;
+}
+
+bool DLM_CleverReso3D::DrawKernelPair(DLM_Random& ranGen,
+                                      ResoPair3D& pair,
+                                      bool& useExternalKernel) const {
+    useExternalKernel = false;
+
+    bool IsReso[2];
+    IsReso[0] = false;
+    IsReso[1] = false;
+
+    for(unsigned uParticle=0; uParticle<2; uParticle++){
+        const double RanVal = ranGen.Uniform(0,1);
+        IsReso[uParticle] = RanVal<ResoWeight[uParticle];
+    }
+
+    if(IsReso[0]&&IsReso[1]){
+        if(PairInput_RR.empty()) return false;
+        pair = PairInput_RR[ranGen.Integer(0,PairInput_RR.size())];
+        useExternalKernel = true;
+        return true;
+    }
+
+    if((!IsReso[0])&&IsReso[1]){
+        if(PairInput_PR.empty()) return false;
+        pair = PairInput_PR[ranGen.Integer(0,PairInput_PR.size())];
+        useExternalKernel = true;
+        return true;
+    }
+
+    if(IsReso[0]&&(!IsReso[1])){
+        if(!PairInput_RP.empty()){
+            pair = PairInput_RP[ranGen.Integer(0,PairInput_RP.size())];
+            useExternalKernel = true;
+            return true;
+        }
+        if(PairInput_PR.empty()) return false;
+        const ResoPair3D& canonicalPR =
+            PairInput_PR[ranGen.Integer(0,PairInput_PR.size())];
+
+        // Reuse the canonical PR EPOS kernel for RP. The pair total momentum is
+        // unchanged by swapping particle order, so the LCMS out/side axes and
+        // source-to-daughter LCMS transform are the same. The sampled Gaussian
+        // core vector is symmetric under r -> -r; the important non-symmetric
+        // piece is the propagation shift, which is handled by swapping Part1
+        // and Part2 before BuildRstarFromPair applies -shift1 + shift2.
+        pair = canonicalPR;
+        pair.Part1 = canonicalPR.Part2;
+        pair.Part2 = canonicalPR.Part1;
+        useExternalKernel = true;
+        return true;
+    }
+
+    return true;
+}
+
+TVector3 DLM_CleverReso3D::TransformCoreFromSourceToDaughterLCMS(
+    const TVector3& rCoreSourceLCMS,
+    const ResoPair3D& pair) const {
+
+    const double rOutSouLCMS = rCoreSourceLCMS.X();
+    const double rSideSouLCMS = rCoreSourceLCMS.Y();
+    const double rLongSouLCMS = rCoreSourceLCMS.Z();
+
+    const double rOutDauLCMS =
+        rOutSouLCMS * pair.oS_dot_oD +
+        rSideSouLCMS * pair.sS_dot_oD;
+
+    const double rSideDauLCMS =
+        rOutSouLCMS * pair.oS_dot_sD +
+        rSideSouLCMS * pair.sS_dot_sD;
+
+    const double rLongDauLCMS =
+        rLongSouLCMS * pair.LongScale;
+
+    return TVector3(rOutDauLCMS, rSideDauLCMS, rLongDauLCMS);
+}
+
+TVector3 DLM_CleverReso3D::BuildRstarFromPair(
+    const ResoPair3D& pair,
+    const TVector3& rCoreSourceLCMS,
+    DLM_Random& ranGen) const {
+
+    TVector3 rCoreDaughterLCMS =
+        TransformCoreFromSourceToDaughterLCMS(rCoreSourceLCMS, pair);
+
+    TVector3 shift1 = PropagationShiftInLCMS(pair.Part1, ranGen);
+    TVector3 shift2 = PropagationShiftInLCMS(pair.Part2, ranGen);
+
+    return rCoreDaughterLCMS - shift1 + shift2;
+}
+
+TVector3 DLM_CleverReso3D::BuildRstarFromPrimaryPrimary(
+    const TVector3& rCoreSourceLCMS) const {
+
+    // For PP there is no resonance propagation and the source pair is identical
+    // to the daughter pair. Thus source LCMS and daughter LCMS are the same
+    // frame, and the forward map reduces to r* = r_core.
+    return rCoreSourceLCMS;
+}
+
+double DLM_CleverReso3D::Eval(double* Pars){
+    if(ResoWeight[0]>0. && ResoWeight[1]>0. && PairInput_RR.empty()){
+        if(DebugMode) printf("\033[1;33mWARNING!\033[0m DLM_CleverReso3D::Eval may need RR kinematics but PairInput_RR is empty\n");
+    }
+    if((1.-ResoWeight[0])*ResoWeight[1]>0. && PairInput_PR.empty()){
+        if(DebugMode) printf("\033[1;33mWARNING!\033[0m DLM_CleverReso3D::Eval may need PR/RP kinematics but PairInput_PR is empty\n");
+    }
+    if(ResoWeight[0]*(1.-ResoWeight[1])>0. && PairInput_RP.empty() && PairInput_PR.empty()){
+        if(DebugMode) printf("\033[1;33mWARNING!\033[0m DLM_CleverReso3D::Eval may need RP kinematics but neither PairInput_RP nor PairInput_PR is available\n");
+    }
+    if(ResoWeight[0]>=1. && ResoWeight[1]>=1. && PairInput_RR.empty()){
+        if(DebugMode) printf("\033[1;33mWARNING!\033[0m DLM_CleverReso3D::Eval called without RR kinematics\n");
+        return 0.;
+    }
+    if(!NumMcIter) return 0.;
+
+    // CATS3D source convention:
+    // Pars[3..5] = r* in daughter LCMS,
+    // Pars[6..8] = core radii, Pars[9] = Levy stability alpha.
+    const double& rOutStar  = Pars[3];
+    const double& rSideStar = Pars[4];
+    const double& rLongStar = Pars[5];
+
+    const double& scaleOut  = Pars[6];
+    const double& scaleSide = Pars[7];
+    const double& scaleLong = Pars[8];
+    const double stability = Pars[9];
+
+    if(scaleOut<=0. || scaleSide<=0. || scaleLong<=0.) {
+        if(DebugMode) printf("\033[1;33mWARNING!\033[0m Bad source scale passed into DLM_CleverReso3D::Eval\n");
+        return 0.;
+    }
+    if(stability<MinStability || stability>MaxStability){
+        if(DebugMode) printf("\033[1;33mWARNING!\033[0m Bad stability parameter passed into DLM_CleverReso3D::Eval\n");
+        return 0.;
+    }
+
+    const double RStar[3] = {rOutStar,rSideStar,rLongStar};
+    double SourceValue = -1.;
+
+    // The local cache owns its histograms and may evict the least-recently used
+    // entry when a new parameter point is requested. Therefore the lookup,
+    // optional construction, and Eval must stay in the same critical section:
+    // otherwise another OpenMP worker could delete the histogram after this
+    // worker receives the pointer but before it evaluates the source. TM uses a
+    // global histogram cache; the same idea is kept here, but the protected
+    // object is the small 3-D local cache rather than one large 3-D+parameter
+    // histogram.
+    #pragma omp critical(DLM_CleverReso3DCache)
+    {
+        DLM_Histo<double>* sourceHisto =
+            GetSourceHisto3D(scaleOut, scaleSide, scaleLong, stability);
+        if(sourceHisto){
+            SourceValue = Normalization*sourceHisto->Eval(RStar);
+        }
+    }
+
+    return SourceValue;
+}
+
+double DLM_CleverReso3D::EvalPoint(const TVector3& rStar,
+                                   const double& scaleOut,
+                                   const double& scaleSide,
+                                   const double& scaleLong,
+                                   const double& stability) const {
+    double PARS[10] = {};
+    PARS[3] = rStar.X();
+    PARS[4] = rStar.Y();
+    PARS[5] = rStar.Z();
+    PARS[6] = scaleOut;
+    PARS[7] = scaleSide;
+    PARS[8] = scaleLong;
+    PARS[9] = stability;
+    return const_cast<DLM_CleverReso3D*>(this)->Eval(PARS);
+}
+// End the 3-D resonance source
+
 
 DLM_HistoSource::DLM_HistoSource(DLM_Histo<float>* histo):MyOwnHisto(false){
   if(histo->GetDim()>2){
@@ -3016,5 +4639,3 @@ double DLM_MultiKdpSource::RootEval(double* x, double* pars){
         return 0;
     }
 }
-
-

@@ -25,6 +25,7 @@ public:
     double Exponential(const double& lambda);
     //as used in physics, where the input variable is 1/lambda = mean
     double Exp(const double& mean);
+    double Gamma(const double& shape, const double& scale);
     double Stable(const double& stability=2, const double& location=0, const double& scale=1, const double& skewness=0);
     double GaussR(const unsigned short& dim, const double& mean, const double& sigma);
     double CauchyR(const unsigned short& dim, const double& mean, const double& sigma);

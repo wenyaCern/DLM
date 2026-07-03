@@ -1,0 +1,8 @@
+CMake_CATS
+/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_Pion_PbPb
+/usr/local/Cellar/root/6.36.04_1
+/usr/local/opt/gsl/include
+/usr/local/opt/gsl/lib
+/usr/local/opt/libomp/include
+/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/install
+/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_Pion_PbPb/CMake/bin

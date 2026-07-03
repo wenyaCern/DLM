@@ -11,6 +11,7 @@
 #include "DLM_CppTools.h"
 #include "CATSconstants.h"
 #include "CATS.h"
+#include "CATS3D.h"
 #include "DLM_Random.h"
 #include "DLM_MathFunctions.h"
 
@@ -1461,6 +1462,51 @@ void CATSnode::Update(const bool& ThisNodeOnly){
     }
 }
 
+void CATSnode::Update3D(){
+    Update3D(false);
+}
+
+void CATSnode::Update3D(const bool& ThisNodeOnly){
+    if(Elder->SourceContext){
+        for(short sDim=0; sDim<Elder->Dim; sDim++){
+            Elder->SourcePars->SetVariable(3+sDim,MeanVal[sDim],false);
+        }
+        SourceValue = Elder->SourceFunction3D(Elder->SourceContext)*GridSize;
+    }
+    else if(Elder->GridBoxId){
+        unsigned first, last;
+        first = Elder->FindFirstParticleWithID(FirstID);
+        last = Elder->FindLastParticleWithID(LastID);
+
+        //the normal situation
+        if(first<Elder->NumOfEl && last<Elder->NumOfEl){
+            SourceValue = double(last-first+1)/double(Elder->NumOfEl);
+        }
+        //the case where we should include all particles
+        //(both boxes are outside the range, first on the low side and last on the upper side)
+        else if(first==Elder->NumOfEl && last==first+1){
+            SourceValue = 1;
+        }
+        //the case where the first box is outside range on the low side
+        else if(first==Elder->NumOfEl && last<Elder->NumOfEl){
+            SourceValue = double(last+1)/double(Elder->NumOfEl);
+        }
+        //the case where the last box is outside range on the up side
+        else if(first<Elder->NumOfEl && last>Elder->NumOfEl){
+            SourceValue = double(Elder->NumOfEl-first)/double(Elder->NumOfEl);
+        }
+        else{
+            SourceValue = 0;
+        }
+    }
+    else{
+       SourceValue = 0;
+    }
+    if(child && !ThisNodeOnly){
+        for(unsigned uSub=0; uSub<Elder->NumSubNodes; uSub++) child[uSub]->Update3D();
+    }
+}
+
 void CATSnode::StandardNodeInit(double* mean, double* len, const CATSnode* TemplateNode){
     SourceValue = 0;
     MeanVal = new double [Elder->Dim];
@@ -1472,7 +1518,10 @@ void CATSnode::StandardNodeInit(double* mean, double* len, const CATSnode* Templ
         GridSize *= IntLen[sDim];
     }
 
-    Update(true);
+    if (!Elder->GetIsCATS3D())
+        Update(true);
+    else
+        Update3D(true);
 
     child = NULL;
     bool HasChildren;
@@ -1521,17 +1570,17 @@ void CATSnode::StandardNodeInit(double* mean, double* len, const CATSnode* Templ
 
 //! see what happens if epsilon==0
 CATSelder::CATSelder(const short& dim, const short& mindep, const short& maxdep, const double& epsilon, double* mean, double* len,
-                     void* context, CATSparameters* Pars, int64_t* gbid, const unsigned& numel, const bool& renorm):
+                     void* context, CATSparameters* Pars, int64_t* gbid, const unsigned& numel, const bool& renorm, const bool& isCATS3D):
     CATSnode(this, 0, 0, uipow(2,dim*maxdep)-1, mean, len),
-    Dim(dim),MinDepth(mindep),MaxDepth(maxdep),Epsilon(epsilon),NumSubNodes(uipow(2,Dim)),NumOfEl(numel){
+    Dim(dim),MinDepth(mindep),MaxDepth(maxdep),Epsilon(epsilon),NumSubNodes(uipow(2,Dim)),NumOfEl(numel),IsCATS3D(isCATS3D){
 
     BaseConstructor(mean, len, context, Pars, gbid, numel, NULL, renorm);
 }
 
-CATSelder::CATSelder(const CATSelder* TemplateElder, void* context, CATSparameters* Pars, int64_t* gbid, const unsigned& numel, const bool& renorm):
+CATSelder::CATSelder(const CATSelder* TemplateElder, void* context, CATSparameters* Pars, int64_t* gbid, const unsigned& numel, const bool& renorm, const bool& isCATS3D):
     CATSnode(this, 0, 0, uipow(2,TemplateElder->Dim*TemplateElder->MaxDepth)-1, TemplateElder->MeanVal, TemplateElder->IntLen),
     Dim(TemplateElder->Dim),MinDepth(TemplateElder->MinDepth),MaxDepth(TemplateElder->MaxDepth),
-    Epsilon(TemplateElder->Epsilon),NumSubNodes(uipow(2,Dim)),NumOfEl(numel){
+    Epsilon(TemplateElder->Epsilon),NumSubNodes(uipow(2,Dim)),NumOfEl(numel),IsCATS3D(isCATS3D){
 
     BaseConstructor(TemplateElder->MeanVal, TemplateElder->IntLen, context, Pars, gbid, numel, TemplateElder, renorm);
 
@@ -1610,6 +1659,10 @@ double CATSelder::GetSourceIntegral(){
         Integral += EndNode[uNode]->SourceValue;
     }
     return Integral;
+}
+
+bool CATSelder::GetIsCATS3D(){
+    return IsCATS3D;
 }
 
 CATSelder::~CATSelder(){
@@ -1803,6 +1856,12 @@ double CATSelder::SourceFunction(void* context){
 //printf("CATSelder::SourceFunction\n");
     return static_cast<CATS*>(context)->EvaluateTheSource(SourcePars);
 }
+
+double CATSelder::SourceFunction3D(void* context){
+//printf("CATSelder::SourceFunction\n");
+    return static_cast<CATS3D*>(context)->EvaluateTheSource(SourcePars);
+}
+
 
 double CatsSourceForwarder(void* context, double* Pars){return static_cast<CatsSource*>(context)->Eval(Pars);}
 

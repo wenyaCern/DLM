@@ -1,0 +1,7 @@
+mT_bin	mT_range_GeV	R_Levy_alpha2	R_Levy_alpha2_err	alpha	alpha_fixed	chi2	ndf	chi2_ndf	output_file	lambda_file	lambda_hist
+2	0.40-0.50	6.24735	2.31525	2.0	yes	27.3268	49	0.55769	fit_results_pureGaussian_correctLambda_cent30to50_mT2.root	../Files/lam/kStarDepLambda_cent30to50_pion_PbPb.root	hPurityKstar_mT0.40to0.50_cent30to50
+3	0.50-0.60	6.47194	2.48862	2.0	yes	0.0523154	48	0.0010899	fit_results_pureGaussian_correctLambda_cent30to50_mT3.root	../Files/lam/kStarDepLambda_cent30to50_pion_PbPb.root	hPurityKstar_mT0.50to0.60_cent30to50
+4	0.60-0.70	6.48616	2.49656	2.0	yes	0.149021	48	0.0031046	fit_results_pureGaussian_correctLambda_cent30to50_mT4.root	../Files/lam/kStarDepLambda_cent30to50_pion_PbPb.root	hPurityKstar_mT0.60to0.70_cent30to50
+5	0.70-0.90	6.07357	2.32221	2.0	yes	0.0841923	48	0.00175401	fit_results_pureGaussian_correctLambda_cent30to50_mT5.root	../Files/lam/kStarDepLambda_cent30to50_pion_PbPb.root	hPurityKstar_mT0.70to0.90_cent30to50
+6	0.90-1.10	5.78725	2.0894	2.0	yes	2.36629	48	0.0492978	fit_results_pureGaussian_correctLambda_cent30to50_mT6.root	../Files/lam/kStarDepLambda_cent30to50_pion_PbPb.root	hPurityKstar_mT0.90to1.10_cent30to50
+7	1.10-1.50	4.92951	1.90449	2.0	yes	0.127442	47	0.00271153	fit_results_pureGaussian_correctLambda_cent30to50_mT7.root	../Files/lam/kStarDepLambda_cent30to50_pion_PbPb.root	hPurityKstar_mT1.10to1.50_cent30to50

@@ -1,5 +1,6 @@
 #include "DLM_Random.h"
 #include <stdio.h>
+#include <cmath>
 
 using namespace std;
 
@@ -70,6 +71,11 @@ double DLM_Random::Exponential(const double& lambda){
 }
 double DLM_Random::Exp(const double& mean){
     return (ExpDist[0](*MT_RanGen))*mean;
+}
+double DLM_Random::Gamma(const double& shape, const double& scale){
+    if(shape<=0 || scale<=0) return 0;
+    std::gamma_distribution<> GammaDist(shape,scale);
+    return GammaDist(*MT_RanGen);
 }
 double DLM_Random::Stable(const double& stability, const double& location, const double& scale, const double& skewness){
     if(stability<=0||stability>2){

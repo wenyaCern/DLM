@@ -1,0 +1,357 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+
+\title{Normalized Source-Shape Fit Functions for EPOS Pion Pair Sources}
+\author{}
+\date{June 1, 2026}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+This note summarizes the normalized fit functions implemented in
+\texttt{marco\_fitEPOSPrimordialLevy.C} for describing the EPOS primordial
+pion pair source distributions. The goal is to compare different
+non-Gaussian source-shape parameterizations without allowing an arbitrary
+overall amplitude or pedestal term to improve the fit artificially.
+
+\section*{Common Normalization Convention}
+
+The input source histogram is normalized as a probability density:
+\begin{equation}
+  \int h(x)\,dx = 1.
+\end{equation}
+
+Each fit function is also normalized over the fit range:
+\begin{equation}
+  S_{\rm fit}(x;\vec p)
+  =
+  \frac{S_{\rm raw}(x;\vec p)}
+       {\int_{x_{\rm min}}^{x_{\rm max}} S_{\rm raw}(x';\vec p)\,dx'}.
+\end{equation}
+
+For signed one-dimensional projections, such as
+\(r_{\rm out}\), \(r_{\rm side}\), and \(r_{\rm long}\), the raw function is
+used directly. For radial distributions, such as \(r_{\rm inv}^{*}\) or
+\(|r|_{\rm LCMS}\), the raw function includes the radial shell factor:
+\begin{equation}
+  S_{\rm raw}^{\rm radial}(r)
+  =
+  r^2\,S_{\rm shape}(r).
+\end{equation}
+
+The factor \(4\pi\) is absorbed by normalization and therefore does not affect
+the fitted shape parameters.
+
+\section*{Fit Functions}
+
+\subsection*{1. Normalized Double Gaussian}
+
+For a signed 1D projection:
+\begin{equation}
+  S_{\rm raw}(x)
+  =
+  \exp\!\left(-\frac{x^2}{2R_{\rm narrow}^2}\right)
+  +
+  w_{\rm broad}
+  \exp\!\left(-\frac{x^2}{2R_{\rm broad}^2}\right).
+\end{equation}
+
+For a radial source distribution:
+\begin{equation}
+  S_{\rm raw}(r)
+  =
+  r^2
+  \left[
+  \exp\!\left(-\frac{r^2}{2R_{\rm narrow}^2}\right)
+  +
+  w_{\rm broad}
+  \exp\!\left(-\frac{r^2}{2R_{\rm broad}^2}\right)
+  \right].
+\end{equation}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Parameter & Meaning & Comment \\
+\midrule
+\(R_{\rm narrow}\) & Width of the narrow Gaussian part & Describes the central peak scale \\
+\(R_{\rm broad}\) & Width of the broad Gaussian part & Captures a broad tail-like shape \\
+\(w_{\rm broad}\) & Relative broad Gaussian weight & Shape weight, not a physical source fraction \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This function is useful as a compact empirical comparison. However, the broad
+Gaussian should not be interpreted as a separate pion source component. It is
+only a basis term for describing a non-Gaussian averaged source shape.
+
+\subsection*{2. Normalized Symmetric Levy}
+
+For a signed 1D projection:
+\begin{equation}
+  S_{\rm raw}(x)
+  =
+  \exp\!\left[-\left(\frac{|x|}{R}\right)^\alpha\right].
+\end{equation}
+
+For a radial source distribution:
+\begin{equation}
+  S_{\rm raw}(r)
+  =
+  r^2
+  \exp\!\left[-\left(\frac{r}{R}\right)^\alpha\right].
+\end{equation}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Parameter & Meaning & Comment \\
+\midrule
+\(R\) & Characteristic source scale & Homogeneity-length scale \\
+\(\alpha\) & Levy stability / tail parameter & \(\alpha=2\) Gaussian, \(\alpha=1\) exponential-like \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This is the simplest normalized non-Gaussian model. In the current EPOS source
+studies, it is often not flexible enough to describe both the sharp central
+peak and the far tail simultaneously.
+
+\subsection*{3. Normalized Gaussian Plus Exponential Tail}
+
+For a signed 1D projection:
+\begin{equation}
+  S_{\rm raw}(x)
+  =
+  \exp\!\left(-\frac{x^2}{2R_G^2}\right)
+  +
+  w_{\rm exp}
+  \exp\!\left(-\frac{|x|}{L_{\rm exp}}\right).
+\end{equation}
+
+For a radial source distribution:
+\begin{equation}
+  S_{\rm raw}(r)
+  =
+  r^2
+  \left[
+  \exp\!\left(-\frac{r^2}{2R_G^2}\right)
+  +
+  w_{\rm exp}
+  \exp\!\left(-\frac{r}{L_{\rm exp}}\right)
+  \right].
+\end{equation}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Parameter & Meaning & Comment \\
+\midrule
+\(R_G\) & Gaussian core width & Central source scale \\
+\(L_{\rm exp}\) & Exponential tail length & Effective long-range falloff scale \\
+\(w_{\rm exp}\) & Relative exponential tail weight & Shape weight, not a source fraction \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This function is motivated by the observation that the intermediate-to-large
+distance region can appear approximately linear on a log-scale plot. The
+exponential term should be viewed as an effective tail shape, not as a new
+physical pion component by itself.
+
+\subsection*{4. Normalized Log-Normal Radius Mixture}
+
+The source is modeled as a continuous superposition of Gaussian sources with a
+fluctuating radius:
+\begin{equation}
+  S_{\rm raw}(x)
+  =
+  \int dR\,
+  P_{\rm LN}(R;R_{\rm med},\sigma_{\ln R})
+  \exp\!\left(-\frac{x^2}{2R^2}\right),
+\end{equation}
+where
+\begin{equation}
+  P_{\rm LN}(R;R_{\rm med},\sigma_{\ln R})
+  =
+  \frac{1}{R\,\sigma_{\ln R}\sqrt{2\pi}}
+  \exp\!\left[
+    -\frac{\left(\ln R-\ln R_{\rm med}\right)^2}
+          {2\sigma_{\ln R}^2}
+  \right].
+\end{equation}
+
+For radial distributions, the same shell factor is applied:
+\begin{equation}
+  S_{\rm raw}(r)
+  =
+  r^2
+  \int dR\,
+  P_{\rm LN}(R;R_{\rm med},\sigma_{\ln R})
+  \exp\!\left(-\frac{r^2}{2R^2}\right).
+\end{equation}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Parameter & Meaning & Comment \\
+\midrule
+\(R_{\rm med}\) & Median Gaussian radius & Typical homogeneity length \\
+\(\sigma_{\ln R}\) & Width of radius fluctuations in log-space & Controls non-Gaussian tail strength \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The physical motivation is that the observed source is an event-averaged
+superposition of approximately Gaussian homogeneity regions with fluctuating
+size. A log-normal distribution is a minimal positive-definite model for
+multiplicative source-scale fluctuations, for example from multiplicity,
+geometry, flow, and \(m_T\) selection effects.
+
+\subsection*{5. Normalized Gamma-Mixture / q-Gaussian}
+
+The effective q-Gaussian form is
+\begin{equation}
+  S_{\rm raw}(x)
+  =
+  \left(
+  1+\frac{x^2}{\nu R^2}
+  \right)^{-(\nu+1)/2}.
+\end{equation}
+
+For a radial source distribution:
+\begin{equation}
+  S_{\rm raw}(r)
+  =
+  r^2
+  \left(
+  1+\frac{r^2}{\nu R^2}
+  \right)^{-(\nu+1)/2}.
+\end{equation}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Parameter & Meaning & Comment \\
+\midrule
+\(R\) & Characteristic source scale & Sets the central width \\
+\(\nu\) & Tail / fluctuation parameter & Smaller \(\nu\) gives heavier tails; large \(\nu\) approaches Gaussian \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This form can be interpreted as an effective result of Gaussian scale
+fluctuations, for example when a positive-definite width or inverse-width
+parameter follows a gamma-like distribution. It is a compact two-parameter
+description of a sharp core plus long tail.
+
+\subsection*{Relation to the Gamma Special Function}
+
+The word ``gamma'' in ``gamma-mixture'' does not mean that the fitted source
+is the gamma special function itself. The connection is indirect:
+
+\begin{equation}
+  \Gamma(k)
+  =
+  \int_0^\infty t^{k-1}e^{-t}\,dt
+\end{equation}
+
+is the gamma special function. It appears as the normalization constant of the
+Gamma probability distribution:
+\begin{equation}
+  P(\beta;k,\theta)
+  =
+  \frac{1}{\Gamma(k)\theta^k}
+  \beta^{k-1}e^{-\beta/\theta},
+  \qquad \beta > 0.
+\end{equation}
+
+In the source-shape model, the gamma-mixture idea is that a positive-definite
+Gaussian scale parameter fluctuates. For example, define an inverse width
+parameter
+\begin{equation}
+  \beta \sim \frac{1}{R^2}.
+\end{equation}
+
+If \(\beta\) follows a Gamma distribution, then the observed effective source
+shape is obtained by averaging Gaussian shapes over this fluctuation:
+\begin{equation}
+  S(x)
+  =
+  \int_0^\infty d\beta\,
+  P(\beta;k,\theta)
+  \exp\!\left(-\frac{\beta x^2}{2}\right).
+\end{equation}
+
+This integral gives a heavy-tailed q-Gaussian / Student-t-like form:
+\begin{equation}
+  S(x)
+  \propto
+  \left(
+  1+\frac{x^2}{\nu R^2}
+  \right)^{-(\nu+1)/2}.
+\end{equation}
+
+Thus the logical chain is
+\begin{equation}
+  \Gamma(k)
+  \rightarrow
+  \text{Gamma distribution}
+  \rightarrow
+  \text{Gaussian scale mixture}
+  \rightarrow
+  \text{q-Gaussian / Student-t-like source shape}.
+\end{equation}
+
+In other words, the fit function is not the gamma special function
+\(\Gamma(x)\). Rather, it is the effective source shape obtained when the
+Gaussian source scale, or inverse scale, fluctuates according to a
+Gamma-distributed positive variable.
+
+\section*{Parameter Counting}
+
+\begin{center}
+\begin{tabular}{lc}
+\toprule
+Model & Number of free shape parameters \\
+\midrule
+Normalized double Gaussian & 3 \\
+Normalized symmetric Levy & 2 \\
+Normalized Gaussian + exponential tail & 3 \\
+Normalized log-normal radius mixture & 2 \\
+Normalized gamma-mixture / q-Gaussian & 2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+After normalization, none of these models contains a free overall amplitude or
+pedestal. Therefore, improvements in \(\chi^2/{\rm NDF}\) are more directly
+related to the shape flexibility and physical structure of the model rather
+than to arbitrary normalization freedom.
+
+\section*{Interpretation Strategy}
+
+The log-normal and gamma-mixture models should not be interpreted as adding
+new pion sources. Instead, they model the observed primordial pair source as a
+continuous average over source scales:
+\begin{equation}
+  S_{\rm obs}(x)
+  =
+  \int dR\,P(R)\,G(x;R).
+\end{equation}
+
+This is consistent with centrality mixing, event-by-event geometry
+fluctuations, multiplicity fluctuations, \(m_T\)-selection effects, and flow
+geometry variations. The non-Gaussian tail is therefore treated as a property
+of the averaged homogeneity region, not as a separate physical emission
+component.
+
+\end{document}

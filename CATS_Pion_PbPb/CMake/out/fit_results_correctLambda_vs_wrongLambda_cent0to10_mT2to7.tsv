@@ -1,0 +1,7 @@
+mT_bin	old_R_Gaussian_wrongLambda	new_R_Gaussian_correctLambda	Delta_Gaussian	old_R_MixtureGamma_wrongLambda	new_R_MixtureGamma_correctLambda	Delta_MixtureGamma
+2	13.9005	9.89202	-4.00848	0	8.67329	8.67329
+3	13.9216	10.232	-3.6896	0	8.81612	8.81612
+4	13.4242	9.92332	-3.50088	13.1041	8.41643	-4.68767
+5	12.943	9.42626	-3.51674	12.8401	7.98377	-4.85633
+6	12.4902	24.9999	12.5097	12.7135	7.96624	-4.74726
+7	11.3157	8.49884	-2.81686	11.2823	6.68831	-4.59399

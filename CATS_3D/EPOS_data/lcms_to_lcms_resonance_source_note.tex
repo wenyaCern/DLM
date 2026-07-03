@@ -1,0 +1,245 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue
+}
+
+\title{LCMS-to-LCMS Transformation for Resonance Contributions\\to the 3D Femtoscopic Source}
+\author{}
+\date{April 29, 2026}
+
+\begin{document}
+
+\maketitle
+
+\section{Scope}
+
+The goal is to model the transformation of the core separation vector from the
+source-frame LCMS to the final daughter-pair LCMS. The experimental 3D
+femtoscopic source to be fitted is defined in the daughter-pair LCMS, with
+coordinates
+\[
+  (r_{\mathrm{out}}, r_{\mathrm{side}}, r_{\mathrm{long}}).
+\]
+Therefore no transformation to the pair rest frame is required here.
+
+The relevant transformation is
+\[
+  \mathrm{LCMS}_{\mathrm{core/source}}
+  \rightarrow
+  \mathrm{LCMS}_{\mathrm{daughter}},
+\]
+followed by the addition of resonance decay propagation shifts when a particle
+is produced from a resonance.
+
+\section{Coordinate Convention}
+
+For a pair of particles with total four-momentum
+\[
+  P = p_1 + p_2,
+\]
+the LCMS is defined by removing the longitudinal pair velocity,
+\[
+  \beta_z = \frac{P_z}{P_0}.
+\]
+The outward axis is defined by the transverse pair momentum,
+\[
+  \hat{o} =
+  \frac{(P_x, P_y, 0)}
+       {\sqrt{P_x^2 + P_y^2}},
+\]
+the sideward axis by
+\[
+  \hat{s} = \hat{z} \times \hat{o},
+\]
+and the longitudinal axis by
+\[
+  \hat{l} = \hat{z}.
+\]
+
+\section{Core Separation in the Source LCMS}
+
+The sampled core separation is assumed to be generated in the source-pair LCMS:
+\[
+  \Delta x_S =
+  \left(
+    \Delta t_S,
+    \Delta \vec{r}_S
+  \right),
+  \qquad
+  \Delta t_S = 0,
+\]
+with
+\[
+  \Delta \vec{r}_S =
+  r_{\mathrm{out}}^S \hat{o}_S
+  + r_{\mathrm{side}}^S \hat{s}_S
+  + r_{\mathrm{long}}^S \hat{z}.
+\]
+The superscript \(S\) denotes the source-pair LCMS, not necessarily a
+resonance-resonance frame. Its exact definition depends on the topology.
+
+\section{Source LCMS to Daughter LCMS}
+
+Let the source-pair LCMS have longitudinal velocity
+\[
+  \beta_S = \frac{P_{z,S}}{P_{0,S}},
+  \qquad
+  \gamma_S = \frac{1}{\sqrt{1-\beta_S^2}},
+\]
+and the daughter-pair LCMS have
+\[
+  \beta_D = \frac{P_{z,D}}{P_{0,D}},
+  \qquad
+  \gamma_D = \frac{1}{\sqrt{1-\beta_D^2}}.
+\]
+
+Starting from \(\Delta t_S = 0\), the transverse part of the separation is
+unchanged by the longitudinal boost, while the longitudinal coordinate and time
+are mixed. With the convention used in the EPOS helper macro,
+\[
+  p_z^{\mathrm{LCMS}} =
+  \gamma (p_z - \beta E),
+\]
+the source-LCMS separation transforms into the daughter LCMS as
+\[
+  \Delta z_D =
+  \gamma_S \gamma_D
+  (1 - \beta_S \beta_D)
+  \Delta z_S,
+\]
+and
+\[
+  \Delta t_D =
+  \gamma_S \gamma_D
+  (\beta_S - \beta_D)
+  \Delta z_S.
+\]
+Equivalently, in terms of pair rapidities \(Y_S\) and \(Y_D\),
+\[
+  \Delta z_D =
+  \cosh(Y_S - Y_D)\Delta z_S,
+  \qquad
+  \Delta t_D =
+  \sinh(Y_S - Y_D)\Delta z_S.
+\]
+
+Since the target source is defined in the daughter LCMS, the relevant spatial
+coordinates are obtained by projecting the transverse vector onto the daughter
+OSL axes:
+\[
+  r_{\mathrm{out}}^D =
+  \Delta \vec{r}_{T,S} \cdot \hat{o}_D,
+\]
+\[
+  r_{\mathrm{side}}^D =
+  \Delta \vec{r}_{T,S} \cdot \hat{s}_D,
+\]
+\[
+  r_{\mathrm{long}}^D =
+  \Delta z_D.
+\]
+Thus the out-side part is mainly a transverse OSL-axis rotation, while the
+longitudinal part is controlled by the rapidity difference between the two LCMS
+frames.
+
+\section{Topology Dependence}
+
+The boost formula is universal. What changes between resonance topologies is
+the definition of the source pair, and therefore the source LCMS itself.
+
+\begin{center}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.12\linewidth}
+                >{\raggedright\arraybackslash}p{0.34\linewidth}
+                >{\raggedright\arraybackslash}p{0.34\linewidth}}
+\toprule
+Topology & Source pair defining \(\mathrm{LCMS}_S\) & Final pair defining \(\mathrm{LCMS}_D\) \\
+\midrule
+RR &
+\((R_1, R_2)\) &
+\((\pi_1, \pi_2)\) \\
+PR &
+\((\pi_1^{\mathrm{prim}}, R_2)\) &
+\((\pi_1^{\mathrm{prim}}, \pi_2)\) \\
+RP &
+\((R_1, \pi_2^{\mathrm{prim}})\) &
+\((\pi_1, \pi_2^{\mathrm{prim}})\) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Therefore the EPOS information should distinguish the three cases at least by a
+topology flag. The transformation can still be implemented by one common
+function:
+\[
+  \mathrm{LCMS}(p_{1,\mathrm{source}} + p_{2,\mathrm{source}})
+  \rightarrow
+  \mathrm{LCMS}(p_{1,\mathrm{daughter}} + p_{2,\mathrm{daughter}}).
+\]
+
+\section{Recommended EPOS Storage}
+
+For each sampled entry, the robust storage choice is to keep the four lab-frame
+four-momenta needed to reconstruct both pair frames:
+\[
+  p_{1,\mathrm{source}},
+  \quad
+  p_{2,\mathrm{source}},
+  \quad
+  p_{1,\mathrm{daughter}},
+  \quad
+  p_{2,\mathrm{daughter}},
+\]
+together with a topology label:
+\[
+  \mathrm{topology} \in \{\mathrm{RR}, \mathrm{PR}, \mathrm{RP}\}.
+\]
+
+The mapping is
+\[
+\begin{array}{lll}
+\mathrm{RR}: &
+p_{1,\mathrm{source}} = R_1, &
+p_{2,\mathrm{source}} = R_2, \\
+\mathrm{PR}: &
+p_{1,\mathrm{source}} = \pi_1^{\mathrm{prim}}, &
+p_{2,\mathrm{source}} = R_2, \\
+\mathrm{RP}: &
+p_{1,\mathrm{source}} = R_1, &
+p_{2,\mathrm{source}} = \pi_2^{\mathrm{prim}}.
+\end{array}
+\]
+The daughter pair is always the final femtoscopic pair.
+
+Storing only the mother momentum already boosted into the daughter LCMS is not
+sufficient for this coordinate transformation, because the full transformation
+requires reconstructing both the source-pair OSL axes and the daughter-pair OSL
+axes, as well as the rapidity difference between the two LCMS frames.
+
+\section{Practical Consequence for \texttt{DLM\_CleverReso3D}}
+
+The implementation should avoid hard-coding separate boost formulas for RR, PR,
+and RP. Instead, topology should determine which four-momenta are passed as the
+source-pair momenta. The transformation routine can then be common to all
+topologies:
+\[
+  (r_{\mathrm{out}}^S,r_{\mathrm{side}}^S,r_{\mathrm{long}}^S)
+  \rightarrow
+  (r_{\mathrm{out}}^D,r_{\mathrm{side}}^D,r_{\mathrm{long}}^D).
+\]
+
+The subsequent decay contribution should preserve the particle ordering. For a
+relative coordinate convention \(r = x_1 - x_2\), the resonance propagation
+shift enters with opposite signs for particle 1 and particle 2. This is why PR
+and RP should not be merged without retaining the particle labels.
+
+\end{document}

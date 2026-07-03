@@ -16,5 +16,6 @@ const double NuToFm(197.3269602);
 const double hbarc(197.3269602);
 const double RadToDeg(57.295779513082);
 const double DegToRad(0.017453292519943);
+const double Mass_Pic(139.57);
 
 #endif

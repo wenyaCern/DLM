@@ -5,6 +5,9 @@
 template <class Type> class DLM_Histo;
 template <class Type> class DLM_Histo1D;
 #include "CATStools.h"
+#include "TVector3.h"
+#include "TLorentzVector.h"
+#include <vector>
 
 class DLM_Random;
 class KdpPars;
@@ -510,6 +513,445 @@ private:
     DLM_Histo<double>* Histo;
     void Reset();
     void Init();
+};
+
+// Temporary source for testing a non-Levy core shape:
+// a 3-D double-Gaussian core, projected to r*, with the same 1-D transport-model
+// resonance shift machinery as DLM_CleverMcLevyResoTM.
+// Source parameters are:
+//   Pars[3] = R_core
+//   Pars[4] = R_tail
+//   Pars[5] = f_core
+class DLM_CleverMcDoubleGaussResoTM:public CatsSource{
+public:
+    DLM_CleverMcDoubleGaussResoTM();
+    ~DLM_CleverMcDoubleGaussResoTM();
+    double Eval(double* Pars);
+    double RootEval(double* x, double* Pars);
+    double RootEvalNorm(double* x, double* Pars);
+
+    void InitScale(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitTailScale(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitCoreFraction(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitRad(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitType(const int& type);
+    void SetUpReso(const unsigned& whichparticle, const double& weight);
+    void AddBGT_PR(const float& bgt,const float& a_cp);
+    void AddBGT_RP(const float& bgt,const float& a_cp);
+    void AddBGT_RR(const float& bgt0,const float& a_cp0,const float& bgt1,const float& a_cp1,const float& a_p0p1);
+    void InitNumMcIter(const unsigned& numiter);
+    unsigned GetNumPars();
+    void SetNormalization(const double& norm);
+private:
+    //0 = single particle, 1 = pair difference
+    int Type;
+    unsigned NumPtsScale;
+    unsigned NumPtsTailScale;
+    unsigned NumPtsCoreFraction;
+    unsigned NumPtsRad;
+    double MinScale;
+    double MaxScale;
+    double MinTailScale;
+    double MaxTailScale;
+    double MinCoreFraction;
+    double MaxCoreFraction;
+    double MinRad;
+    double MaxRad;
+    double Normalization;
+
+    double* ResoWeight;
+    std::vector<std::vector<float> > BGT_PR;
+    std::vector<std::vector<float> > BGT_RP;
+    std::vector<std::vector<float> > BGT_RR;
+
+    unsigned NumMcIter;
+    DLM_Histo<double>* Histo;
+    void Reset();
+    void Init();
+};
+
+// A non-Gaussian primordial source with the same 1-D transport-model resonance
+// shift machinery as DLM_CleverMcLevyResoTM. The primordial source is sampled
+// directly as a full radial distribution, not as a Gaussian core plus tail.
+// Source parameters are:
+//   Pars[3] = source scale
+//   Pars[4] = source shape
+// For ssGaussian, source scale = R and source shape is unused.
+// For ssLogNormalRadiusMixture, source scale = median R and source shape = sigma_ln R.
+// For ssGammaMixtureQGaussian, source scale = R and source shape = nu.
+class DLM_CleverMcNonGaussResoTM:public CatsSource{
+public:
+    enum SOURCE_SHAPE { ssGaussian=0, ssLogNormalRadiusMixture=1, ssGammaMixtureQGaussian=2 };
+
+    DLM_CleverMcNonGaussResoTM();
+    ~DLM_CleverMcNonGaussResoTM();
+    double Eval(double* Pars);
+    double RootEval(double* x, double* Pars);
+    double RootEvalNorm(double* x, double* Pars);
+
+    void InitScale(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitShape(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitRad(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitType(const int& type);
+    void InitSourceShape(const SOURCE_SHAPE& sourceShape);
+    void SetUpReso(const unsigned& whichparticle, const double& weight);
+    void AddBGT_PR(const float& bgt,const float& a_cp);
+    void AddBGT_RP(const float& bgt,const float& a_cp);
+    void AddBGT_RR(const float& bgt0,const float& a_cp0,const float& bgt1,const float& a_cp1,const float& a_p0p1);
+    void InitNumMcIter(const unsigned& numiter);
+    unsigned GetNumPars();
+    void SetNormalization(const double& norm);
+private:
+    int Type;
+    SOURCE_SHAPE SourceShape;
+    unsigned NumPtsScale;
+    unsigned NumPtsShape;
+    unsigned NumPtsRad;
+    double MinScale;
+    double MaxScale;
+    double MinShape;
+    double MaxShape;
+    double MinRad;
+    double MaxRad;
+    double Normalization;
+
+    double* ResoWeight;
+    std::vector<std::vector<float> > BGT_PR;
+    std::vector<std::vector<float> > BGT_RP;
+    std::vector<std::vector<float> > BGT_RR;
+
+    unsigned NumMcIter;
+    DLM_Histo<double>* Histo;
+    double SamplePrimordialRadius(DLM_Random& ranGen,
+                                  const double& sourceScale,
+                                  const double& sourceShape) const;
+    void Reset();
+    void Init();
+};
+
+// An anisotropic 3-D core source projected back to a 1-D r* source for ordinary
+// 1-D CATS fits. The source parameters are Rout, Rside, Rlong and alpha. In
+// mode rsmLegacy1D, resonance propagation reuses the same 1-D BGT kernels as
+// DLM_CleverMcLevyResoTM after projecting the sampled 3-D core to |r_core|.
+class DLM_CleverMcLevyResoTM_3DTo1D:public CatsSource{
+public:
+    enum RESO_SHIFT_MODE { rsmLegacy1D, rsmVector3D };
+
+    DLM_CleverMcLevyResoTM_3DTo1D();
+    ~DLM_CleverMcLevyResoTM_3DTo1D();
+
+    double Eval(double* Pars);
+    //[0] = Rout, [1] = Rside, [2] = Rlong, [3] = alpha
+    double RootEval(double* x, double* Pars);
+    double RootEvalNorm(double* x, double* Pars);
+
+    void InitStability(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitScale(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitRad(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitType(const int& type);
+    void SetShiftMode(const RESO_SHIFT_MODE& mode);
+    void SetUpReso(const unsigned& whichparticle, const double& weight);
+    void AddBGT_PR(const float& bgt,const float& a_cp);
+    void AddBGT_RP(const float& bgt,const float& a_cp);
+    void AddBGT_RR(const float& bgt0,const float& a_cp0,const float& bgt1,const float& a_cp1,const float& a_p0p1);
+    void AddBGT3D_PR(const TVector3& motherMomentumDaughterPRF,
+                     const double& massMother,
+                     const double& tauMother,
+                     const double& oS_dot_oD,
+                     const double& sS_dot_oD,
+                     const double& oS_dot_sD,
+                     const double& sS_dot_sD,
+                     const double& longScale);
+    void AddBGT3D_RP(const TVector3& motherMomentumDaughterPRF,
+                     const double& massMother,
+                     const double& tauMother,
+                     const double& oS_dot_oD,
+                     const double& sS_dot_oD,
+                     const double& oS_dot_sD,
+                     const double& sS_dot_sD,
+                     const double& longScale);
+    void AddBGT3D_RR(const TVector3& motherMomentumDaughterPRF0,
+                     const double& massMother0,
+                     const double& tauMother0,
+                     const TVector3& motherMomentumDaughterPRF1,
+                     const double& massMother1,
+                     const double& tauMother1,
+                     const double& oS_dot_oD,
+                     const double& sS_dot_oD,
+                     const double& oS_dot_sD,
+                     const double& sS_dot_sD,
+                     const double& longScale);
+    void InitNumMcIter(const unsigned& numiter);
+    unsigned GetNumPars();
+    void SetNormalization(const double& norm);
+private:
+    struct BGT_PR_ENTRY {
+        float bgt;
+        float a_cp;
+    };
+    struct BGT_RR_ENTRY {
+        float bgt0;
+        float a_cp0;
+        float bgt1;
+        float a_cp1;
+        float a_p0p1;
+    };
+    struct ResoParticlePRF {
+        bool isResonance;
+        TVector3 motherMomentumDaughterPRF;
+        double massMother;
+        double tauMother;
+    };
+    struct BGT3D_PAIR_ENTRY {
+        ResoParticlePRF particle0;
+        ResoParticlePRF particle1;
+        double oS_dot_oD;
+        double sS_dot_oD;
+        double oS_dot_sD;
+        double sS_dot_sD;
+        double longScale;
+    };
+    struct SOURCE_CACHE_ENTRY {
+        double scaleOut;
+        double scaleSide;
+        double scaleLong;
+        double stability;
+        DLM_Histo<double>* radialHisto;
+    };
+
+    double SampleStableComponent1D(DLM_Random& ranGen,
+                                   const double& stability,
+                                   const double& scale) const;
+    double ApplyLegacyShift1D(DLM_Random& ranGen,
+                              const double& coreMagnitude) const;
+    TVector3 TransformCoreFromSourceToDaughterPRF(
+        const TVector3& coreVector,
+        const BGT3D_PAIR_ENTRY& entry) const;
+    TVector3 PropagationShiftPRF(const ResoParticlePRF& particle) const;
+    TVector3 BuildRstarFromPairPRF(const BGT3D_PAIR_ENTRY& entry,
+                                   const TVector3& coreVector) const;
+    TVector3 ApplyVectorShift3D(DLM_Random& ranGen,
+                                const TVector3& coreVector) const;
+    DLM_Histo<double>* MakeRadialHisto(const double& scaleOut,
+                                       const double& scaleSide,
+                                       const double& scaleLong,
+                                       const double& stability) const;
+    DLM_Histo<double>* GetCachedRadialHisto(const double& scaleOut,
+                                            const double& scaleSide,
+                                            const double& scaleLong,
+                                            const double& stability);
+    void Reset();
+    void Init();
+
+    int Type;
+    RESO_SHIFT_MODE ShiftMode;
+    unsigned NumPtsStability;
+    unsigned NumPtsScale;
+    unsigned NumPtsRad;
+    double MinStability;
+    double MaxStability;
+    double MinScale;
+    double MaxScale;
+    double MinRad;
+    double MaxRad;
+    double Normalization;
+
+    double ResoWeight[2];
+    std::vector<BGT_PR_ENTRY> BGT_PR;
+    std::vector<BGT_PR_ENTRY> BGT_RP;
+    std::vector<BGT_RR_ENTRY> BGT_RR;
+    std::vector<BGT3D_PAIR_ENTRY> BGT3D_PR;
+    std::vector<BGT3D_PAIR_ENTRY> BGT3D_RP;
+    std::vector<BGT3D_PAIR_ENTRY> BGT3D_RR;
+
+    unsigned NumMcIter;
+    DLM_Histo<double>* Histo;
+    std::vector<SOURCE_CACHE_ENTRY> SourceCache;
+};
+
+struct ResoParticle3D {
+    bool IsResonance = false;
+
+    TVector3 MotherMomentumDauLCMS = TVector3(0.,0.,0.);
+
+    double MassMother = 0.;
+    double Tau = 0.;
+
+    int MotherPdg = 0;
+};
+
+struct ResoPair3D {
+    ResoParticle3D Part1;
+    ResoParticle3D Part2;
+
+    double oS_dot_oD = 1.;
+    double sS_dot_oD = 0.;
+    double oS_dot_sD = 0.;
+    double sS_dot_sD = 1.;
+    double LongScale = 1.;
+};
+
+class DLM_CleverReso3D : public CatsSource {
+public:
+    DLM_CleverReso3D();
+    ~DLM_CleverReso3D();
+
+    double Eval(double* Pars) override;
+    double RootEval(double* x, double* Pars);
+    double RootEvalNorm(double* x, double* Pars);
+
+    void InitStability(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitScale(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitRad(const unsigned& numPts, const double& minVal, const double& maxVal);
+    void InitType(const int& type);
+    void InitNumMcIter(const unsigned& numiter);
+    void SetNormalization(const double& norm);
+
+    // TM-style resonance fraction. whichparticle = 0/1 labels the first/second
+    // pion in the CATS pair, and weight is the probability that this particle
+    // is produced from a resonance.
+    void SetUpReso(const unsigned& whichparticle, const double& weight);
+
+    void ClearKinematics();
+    void ReservePairs(const unsigned& nPairs);
+    void ReservePairs_PR(const unsigned& nPairs);
+    void ReservePairs_RP(const unsigned& nPairs);
+    void AddPairKinematics(const ResoPair3D& pair);
+    void AddPairKinematics_PR(const ResoPair3D& pair);
+    void AddPairKinematics_RP(const ResoPair3D& pair);
+
+    // Canonical PR input: slot 1 is primary, slot 2 is resonance. The same
+    // external EPOS pool can be used for RP internally by swapping the two
+    // particles, but a true RP pool can also be supplied through AddBGT_RP.
+    void AddBGT_PR(const TVector3& mother2MomentumDauLCMS,
+                   const double& massMother2,
+                   const double& tauMother2,
+                   const double& oS_dot_oD,
+                   const double& sS_dot_oD,
+                   const double& oS_dot_sD,
+                   const double& sS_dot_sD,
+                   const double& longScale);
+
+    // RP input: slot 1 is resonance, slot 2 is primary. This is the PR mirror
+    // interface. If no RP pool is supplied, the code falls back to the canonical
+    // PR pool and swaps particle identities internally.
+    void AddBGT_RP(const TVector3& mother1MomentumDauLCMS,
+                   const double& massMother1,
+                   const double& tauMother1,
+                   const double& oS_dot_oD,
+                   const double& sS_dot_oD,
+                   const double& oS_dot_sD,
+                   const double& sS_dot_sD,
+                   const double& longScale);
+
+    void AddBGT_RR(const TVector3& mother1MomentumDauLCMS,
+                   const double& massMother1,
+                   const double& tauMother1,
+                   const TVector3& mother2MomentumDauLCMS,
+                   const double& massMother2,
+                   const double& tauMother2,
+                   const double& oS_dot_oD,
+                   const double& sS_dot_oD,
+                   const double& oS_dot_sD,
+                   const double& sS_dot_sD,
+                   const double& longScale);
+
+    void SetUseLCMS(const bool& val);
+    void SetUseModelCore(const bool& val);
+    void SetDebugMode(const bool& val);
+
+    unsigned GetNumPars() override;
+
+private:
+    void Reset();
+    void Init();
+
+    // core builders
+    TVector3 SampleCoreVector3D(const double& scaleOut,
+                                const double& scaleSide,
+                                const double& scaleLong,
+                                const double& stability,
+                                DLM_Random& ranGen) const;
+    TVector3 BuildRstarFromPair(const ResoPair3D& pair,
+                                const TVector3& rCoreSourceLCMS,
+                                DLM_Random& ranGen) const;
+    TVector3 BuildRstarFromPrimaryPrimary(
+        const TVector3& rCoreSourceLCMS
+    ) const;
+    bool DrawKernelPair(DLM_Random& ranGen,
+                        ResoPair3D& pair,
+                        bool& useExternalKernel) const;
+    TVector3 TransformCoreFromSourceToDaughterLCMS(
+        const TVector3& rCoreSourceLCMS,
+        const ResoPair3D& pair
+    ) const;
+
+    TVector3 PropagationShiftInLCMS(const ResoParticle3D& part,
+                                    DLM_Random& ranGen) const;
+
+    double EvalPoint(const TVector3& rStar,
+                     const double& scaleOut,
+                     const double& scaleSide,
+                     const double& scaleLong,
+                     const double& stability=2.0) const;
+
+    struct SourceCacheEntry3D {
+        double ScaleOut = 0.;
+        double ScaleSide = 0.;
+        double ScaleLong = 0.;
+        double Stability = 2.;
+        unsigned LastUsed = 0;
+        DLM_Histo<double>* Histo = nullptr;
+    };
+
+    void ClearSourceCache();
+    DLM_Histo<double>* CreateEmptySourceHisto3D() const;
+    DLM_Histo<double>* BuildSourceHisto3D(const double& scaleOut,
+                                          const double& scaleSide,
+                                          const double& scaleLong,
+                                          const double& stability) const;
+    DLM_Histo<double>* GetSourceHisto3D(const double& scaleOut,
+                                        const double& scaleSide,
+                                        const double& scaleLong,
+                                        const double& stability);
+    bool SameCachePoint(const SourceCacheEntry3D& entry,
+                        const double& scaleOut,
+                        const double& scaleSide,
+                        const double& scaleLong,
+                        const double& stability) const;
+
+private:
+    int Type;
+    unsigned NumPtsStability;
+    unsigned NumPtsScale;
+    unsigned NumPtsRad;
+    double MinStability;
+    double MaxStability;
+    double MinScale;
+    double MaxScale;
+    double MinRad;
+    double MaxRad;
+    double Normalization;
+
+    unsigned NumMcIter;
+    bool UseLCMS;
+    bool UseModelCore;
+    bool DebugMode;
+
+    double ResoWeight[2];
+
+    std::vector<ResoPair3D> PairInput_RR;
+    std::vector<ResoPair3D> PairInput_PR;
+    std::vector<ResoPair3D> PairInput_RP;
+    std::vector<SourceCacheEntry3D> SourceCache;
+
+    unsigned MaxCacheEntries;
+    unsigned CacheClock;
+    double CacheTolerance;
+
+    // Non-owning pointer to the histogram used in the most recent Eval call.
+    // The actual histograms are owned by SourceCache and deleted in ClearSourceCache().
+    DLM_Histo<double>* Histo;
 };
 
 //the parametes I used for the CECA source poisson parameterization

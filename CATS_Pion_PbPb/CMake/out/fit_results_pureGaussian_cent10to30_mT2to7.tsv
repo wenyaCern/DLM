@@ -1,0 +1,7 @@
+mT_bin	mT_range_GeV	R_Levy_alpha2	R_Levy_alpha2_err	alpha	alpha_fixed	chi2	ndf	chi2_ndf	output_file
+2	0.40-0.50	11.7588	0.0395411	2.0	yes	1776.49	49	36.2549	fit_results_pureGaussian_cent10to30_mT2.root
+3	0.50-0.60	11.8888	0.0296012	2.0	yes	2296.69	48	47.8477	fit_results_pureGaussian_cent10to30_mT3.root
+4	0.60-0.70	11.5667	0.0311903	2.0	yes	2221.79	48	46.2873	fit_results_pureGaussian_cent10to30_mT4.root
+5	0.70-0.90	11.2599	0.0299009	2.0	yes	2094.96	48	43.6450	fit_results_pureGaussian_cent10to30_mT5.root
+6	0.90-1.10	10.9790	0.0485840	2.0	yes	1509.01	48	31.4377	fit_results_pureGaussian_cent10to30_mT6.root
+7	1.10-1.50	9.79411	0.0586787	2.0	yes	523.169	47	11.1313	fit_results_pureGaussian_cent10to30_mT7.root

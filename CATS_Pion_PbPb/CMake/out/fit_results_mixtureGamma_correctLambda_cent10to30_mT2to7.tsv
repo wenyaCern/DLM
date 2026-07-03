@@ -1,0 +1,7 @@
+mT_bin	mT_range_GeV	R_qG_3D	R_qG_3D_err	nu_qG_3D	nu_qG_3D_err	chi2	ndf	chi2_ndf	output_file	lambda_file	lambda_hist
+2	0.40-0.50	7.18144	4.58157	2.61779	43.8844	24.3842	48	0.508004	fit_results_mixtureGamma_correctLambda_cent10to30_mT2.root	../Files/lam/kStarDepLambda_cent10to30_pion_PbPb.root	hPurityKstar_mT0.40to0.50_cent10to30
+3	0.50-0.60	7.30347	4.66731	2.57827	44.0975	0.00457898	47	9.74252e-05	fit_results_mixtureGamma_correctLambda_cent10to30_mT3.root	../Files/lam/kStarDepLambda_cent10to30_pion_PbPb.root	hPurityKstar_mT0.50to0.60_cent10to30
+4	0.60-0.70	6.96169	4.91564	2.21121	14.7341	0.00935823	47	0.000199111	fit_results_mixtureGamma_correctLambda_cent10to30_mT4.root	../Files/lam/kStarDepLambda_cent10to30_pion_PbPb.root	hPurityKstar_mT0.60to0.70_cent10to30
+5	0.70-0.90	6.73499	4.34309	2.7912	43.3905	0.00478427	47	0.000101793	fit_results_mixtureGamma_correctLambda_cent10to30_mT5.root	../Files/lam/kStarDepLambda_cent10to30_pion_PbPb.root	hPurityKstar_mT0.70to0.90_cent10to30
+6	0.90-1.10	5.80783	5.21007	0.659497	6.69978	0.10323	47	0.00219639	fit_results_mixtureGamma_correctLambda_cent10to30_mT6.root	../Files/lam/kStarDepLambda_cent10to30_pion_PbPb.root	hPurityKstar_mT0.90to1.10_cent10to30
+7	1.10-1.50	5.46759	9.5907	0.891142	6.04712	0.0251821	46	0.000547437	fit_results_mixtureGamma_correctLambda_cent10to30_mT7.root	../Files/lam/kStarDepLambda_cent10to30_pion_PbPb.root	hPurityKstar_mT1.10to1.50_cent10to30

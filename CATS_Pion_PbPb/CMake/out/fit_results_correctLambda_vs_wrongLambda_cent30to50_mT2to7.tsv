@@ -1,0 +1,7 @@
+mT_bin	old_R_singleGaussian_wrongLambda	old_R_singleGaussian_over_sqrt2	new_R_Gaussian_correctLambda	Delta_Gaussian_vs_old_over_sqrt2	old_R_MixtureGamma_wrongLambda	new_R_MixtureGamma_correctLambda	Delta_MixtureGamma
+2	9.27252	6.55666	6.24735	-0.30931	8.50541	5.56409	-2.94132
+3	9.61397	6.79811	6.47194	-0.326165	9.21542	5.89952	-3.3159
+4	9.36269	6.62042	6.48616	-0.134262	9.0211	5.56343	-3.45767
+5	9.22588	6.52368	6.07357	-0.450109	9.01725	5.45961	-3.55764
+6	8.83059	6.24417	5.78725	-0.45692	8.56	5.75681	-2.80319
+7	5.42009	3.83258	4.92951	1.09693	6.95168	4.24817	-2.70351
