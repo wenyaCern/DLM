@@ -225,6 +225,9 @@ std::unique_ptr<DLM_CleverReso3D> BuildCATS3DResonanceSource(const FitCATS3DConf
     source->InitStability(cfg.ResonanceAlphaBins,
                           cfg.ResonanceAlphaMin,
                           cfg.ResonanceAlphaMax);
+    source->SetCoreMode(cfg.ResonanceUseEllipsoidalCore ?
+                        DLM_CleverReso3D::cmEllipsoidalLevy :
+                        DLM_CleverReso3D::cmSeparableStable);
     source->SetUseLCMS(true);
     source->SetUseModelCore(false);
     source->SetDebugMode(cfg.ResonanceDebug);
@@ -259,7 +262,10 @@ std::unique_ptr<DLM_CleverReso3D> BuildCATS3DResonanceSource(const FitCATS3DConf
               << " weights=(" << cfg.ResonanceWeight1
               << ", " << cfg.ResonanceWeight2 << ")"
               << " alphaRange=[" << cfg.ResonanceAlphaMin
-              << ", " << cfg.ResonanceAlphaMax << "]\n";
+              << ", " << cfg.ResonanceAlphaMax << "]"
+              << " coreMode="
+              << (cfg.ResonanceUseEllipsoidalCore ? "ellipsoidal" : "separable")
+              << "\n";
 
     return source;
 }

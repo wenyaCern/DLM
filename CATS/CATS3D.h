@@ -1,6 +1,7 @@
 #ifndef CATS3D_H
 #define CATS3D_H
 
+#include <cstddef>
 #include <complex>
 #include <vector>
 #include "CATStools.h"
@@ -152,6 +153,14 @@ public:
     bool GetFastKernelMode() const;
     void SetFastKernelSubdivisions(const unsigned& subdivisions);
     unsigned GetFastKernelSubdivisions() const;
+    void BuildFastKernelOnly();
+    bool IsFastKernelReady() const;
+    size_t GetFastKernelMomSize() const;
+    size_t GetFastKernelGridSize() const;
+    size_t GetFastKernelStorageSize() const;
+    const std::vector<float>& GetFastWaveFunctionKernel() const;
+    void SetFastWaveFunctionKernel(const std::vector<float>& kernel,
+                                   const unsigned& subdivisions=1);
 
     // ---------------------------
     // momentum binning in 3D

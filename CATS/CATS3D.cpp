@@ -88,19 +88,6 @@ CATS3D::CATS3D()
 // destructor
 CATS3D::~CATS3D() {
     DeleteCorrFun();
-    DeleteGridBins();
-    DeleteAllMomBinDefinitions();
-
-    if (AnaSourcePar) {
-        delete AnaSourcePar;
-        AnaSourcePar = nullptr;
-    }
-
-    if (BaseSourceGrid3D) {
-        delete BaseSourceGrid3D;
-        BaseSourceGrid3D = nullptr;
-    }
-
     if (kSourceGrid3D) {
         for (unsigned uOut = 0; uOut < NumMomBins_out; ++uOut) {
             if (!kSourceGrid3D[uOut]) continue;
@@ -120,6 +107,19 @@ CATS3D::~CATS3D() {
         }
         delete[] kSourceGrid3D;
         kSourceGrid3D = nullptr;
+    }
+
+    if (BaseSourceGrid3D) {
+        delete BaseSourceGrid3D;
+        BaseSourceGrid3D = nullptr;
+    }
+
+    DeleteGridBins();
+    DeleteAllMomBinDefinitions();
+
+    if (AnaSourcePar) {
+        delete AnaSourcePar;
+        AnaSourcePar = nullptr;
     }
 
     if (PotPar3D) {
@@ -477,6 +477,59 @@ unsigned CATS3D::GetFastKernelSubdivisions() const {
     return FastKernelSubdivisions;
 }
 
+void CATS3D::BuildFastKernelOnly() {
+    BuildFastWaveFunctionKernel();
+}
+
+bool CATS3D::IsFastKernelReady() const {
+    return FastKernelReady && !FastWaveFunction2.empty();
+}
+
+size_t CATS3D::GetFastKernelMomSize() const {
+    return size_t(NumMomBins_out) * size_t(NumMomBins_side) * size_t(NumMomBins_long);
+}
+
+size_t CATS3D::GetFastKernelGridSize() const {
+    const unsigned subdivisions = FastKernelSubdivisions ? FastKernelSubdivisions : 1;
+    const size_t nBaseGrid =
+        size_t(NumGridBinsX) * size_t(NumGridBinsY) * size_t(NumGridBinsZ);
+    const size_t nSubCells =
+        size_t(subdivisions) * size_t(subdivisions) * size_t(subdivisions);
+    return nBaseGrid * nSubCells;
+}
+
+size_t CATS3D::GetFastKernelStorageSize() const {
+    return GetFastKernelMomSize() * GetFastKernelGridSize();
+}
+
+const std::vector<float>& CATS3D::GetFastWaveFunctionKernel() const {
+    return FastWaveFunction2;
+}
+
+void CATS3D::SetFastWaveFunctionKernel(const std::vector<float>& kernel,
+                                       const unsigned& subdivisions) {
+    const unsigned safeSubdivisions = subdivisions ? subdivisions : 1;
+    if (FastKernelSubdivisions != safeSubdivisions) {
+        FastKernelSubdivisions = safeSubdivisions;
+        DeleteCorrFun();
+    }
+
+    const size_t expectedSize = GetFastKernelStorageSize();
+    if (expectedSize == 0) {
+        throw std::runtime_error("CATS3D::SetFastWaveFunctionKernel: momentum/source grids are not configured.");
+    }
+    if (kernel.size() != expectedSize) {
+        throw std::runtime_error("CATS3D::SetFastWaveFunctionKernel: kernel size does not match current q/r grid.");
+    }
+
+    FastWaveFunction2 = kernel;
+    UseFastKernel = true;
+    FastKernelReady = true;
+    ComputedWaveFunction = true;
+    DeleteCorrFun();
+    ComputedCorrFunction = false;
+}
+
 // setter & getter of momentums
 void CATS3D::SetMomBinsOut(const unsigned& nBins, const double& minMom, const double& maxMom) {
     if (!nBins) {
@@ -510,9 +563,9 @@ void CATS3D::SetMomBinsOut(const unsigned& nBins, const double& minMom, const do
 
     for (unsigned uBin = 0; uBin <= NumMomBins_out; ++uBin) {
         MomBin_out[uBin] = minMom + double(uBin) * binWidth;
-        if (uBin < NumMomBins_out) {
-            MomBinCenter_out[uBin] = 0.5 * (MomBin_out[uBin] + MomBin_out[uBin + 1]);
-        }
+    }
+    for (unsigned uBin = 0; uBin < NumMomBins_out; ++uBin) {
+        MomBinCenter_out[uBin] = 0.5 * (MomBin_out[uBin] + MomBin_out[uBin + 1]);
     }
 
     DeleteCorrFun();
@@ -553,9 +606,9 @@ void CATS3D::SetMomBinsSide(const unsigned& nBins, const double& minMom, const d
 
     for (unsigned uBin = 0; uBin <= NumMomBins_side; ++uBin) {
         MomBin_side[uBin] = minMom + double(uBin) * binWidth;
-        if (uBin < NumMomBins_side) {
-            MomBinCenter_side[uBin] = 0.5 * (MomBin_side[uBin] + MomBin_side[uBin + 1]);
-        }
+    }
+    for (unsigned uBin = 0; uBin < NumMomBins_side; ++uBin) {
+        MomBinCenter_side[uBin] = 0.5 * (MomBin_side[uBin] + MomBin_side[uBin + 1]);
     }
 
     DeleteCorrFun();
@@ -596,9 +649,9 @@ void CATS3D::SetMomBinsLong(const unsigned& nBins, const double& minMom, const d
 
     for (unsigned uBin = 0; uBin <= NumMomBins_long; ++uBin) {
         MomBin_long[uBin] = minMom + double(uBin) * binWidth;
-        if (uBin < NumMomBins_long) {
-            MomBinCenter_long[uBin] = 0.5 * (MomBin_long[uBin] + MomBin_long[uBin + 1]);
-        }
+    }
+    for (unsigned uBin = 0; uBin < NumMomBins_long; ++uBin) {
+        MomBinCenter_long[uBin] = 0.5 * (MomBin_long[uBin] + MomBin_long[uBin + 1]);
     }
 
     DeleteCorrFun();
@@ -706,9 +759,9 @@ void CATS3D::SetGridX(const unsigned& nBins, const double& minX, const double& m
 
     for (unsigned uBin = 0; uBin <= NumGridBinsX; ++uBin) {
         GridBinX[uBin] = minX + double(uBin) * binWidth;
-        if (uBin < NumGridBinsX) {
-            GridBinCenterX[uBin] = 0.5 * (GridBinX[uBin] + GridBinX[uBin + 1]);
-        }
+    }
+    for (unsigned uBin = 0; uBin < NumGridBinsX; ++uBin) {
+        GridBinCenterX[uBin] = 0.5 * (GridBinX[uBin] + GridBinX[uBin + 1]);
     }
 
     DeleteWaveFunctionCache();
@@ -751,9 +804,9 @@ void CATS3D::SetGridY(const unsigned& nBins, const double& minY, const double& m
 
     for (unsigned uBin = 0; uBin <= NumGridBinsY; ++uBin) {
         GridBinY[uBin] = minY + double(uBin) * binWidth;
-        if (uBin < NumGridBinsY) {
-            GridBinCenterY[uBin] = 0.5 * (GridBinY[uBin] + GridBinY[uBin + 1]);
-        }
+    }
+    for (unsigned uBin = 0; uBin < NumGridBinsY; ++uBin) {
+        GridBinCenterY[uBin] = 0.5 * (GridBinY[uBin] + GridBinY[uBin + 1]);
     }
 
     DeleteWaveFunctionCache();
@@ -796,9 +849,9 @@ void CATS3D::SetGridZ(const unsigned& nBins, const double& minZ, const double& m
 
     for (unsigned uBin = 0; uBin <= NumGridBinsZ; ++uBin) {
         GridBinZ[uBin] = minZ + double(uBin) * binWidth;
-        if (uBin < NumGridBinsZ) {
-            GridBinCenterZ[uBin] = 0.5 * (GridBinZ[uBin] + GridBinZ[uBin + 1]);
-        }
+    }
+    for (unsigned uBin = 0; uBin < NumGridBinsZ; ++uBin) {
+        GridBinCenterZ[uBin] = 0.5 * (GridBinZ[uBin] + GridBinZ[uBin + 1]);
     }
 
     DeleteWaveFunctionCache();

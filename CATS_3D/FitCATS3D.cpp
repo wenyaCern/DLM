@@ -1,5 +1,6 @@
 #include "FitCATS3D.h"
 #include "Basics3D.h"
+#include "CATS3DFastKernelCache.h"
 
 #include "/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/install/include/CATS3D.h"
 #include "/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/install/include/CATSconstants.h"
@@ -16,6 +17,7 @@
 #include "TNtuple.h"
 #include "TROOT.h"
 #include "TString.h"
+#include "TAxis.h"
 
 #include <cmath>
 #include <chrono>
@@ -40,6 +42,7 @@ struct FitProfile3D {
     double BuildDataSec = 0.0;
     double BuildResonanceSourceSec = 0.0;
     double ConfigureKittySec = 0.0;
+    double LoadExternalKernelSec = 0.0;
     double LoadLambdaSec = 0.0;
     double MinuitSec = 0.0;
     double FinalChi2Sec = 0.0;
@@ -62,6 +65,8 @@ struct FitProfile3D {
 struct FitState3D {
     FitCATS3DConfig cfg;
     TH3D* data = nullptr;
+    TH3D* same = nullptr;
+    TH3D* mixed = nullptr;
     CATS3D* kitty = nullptr;
     int nFitBins = 0;
     int nFcnCalls = 0;
@@ -74,11 +79,15 @@ struct FitState3D {
     DLM_CleverReso3D* ResonanceSource = nullptr;
     FitProfile3D Profile;
     double BkgNormInit = 1.0;
+    double BkgParInit[10] = {1.0, 0.0, 0.0, 0.0, 0.0,
+                             0.0, 0.0, 0.0, 0.0, 0.0};
+    double DataNormFactor = 1.0;
 };
 
 FitState3D* gFitState3D = nullptr;
 double gBkgRejectQminMeV = 100.0;
 double gBkgQAxisScaleToMeV = 1000.0;
+double gBkgSliceCutMeV = 60.0;
 
 using Clock3D = std::chrono::steady_clock;
 
@@ -147,12 +156,18 @@ bool IsInsideFitBoxMeV(const TH3D* h,
 double Background3DValue(const double qOut,
                          const double qSide,
                          const double qLong,
-                         const double norm)
+                         const double* par)
 {
-    (void)qOut;
-    (void)qSide;
-    (void)qLong;
-    return norm;
+    return par[0]
+         + par[1] * qOut
+         + par[2] * qSide
+         + par[3] * qLong
+         + par[4] * qOut * qOut
+         + par[5] * qSide * qSide
+         + par[6] * qLong * qLong
+         + par[7] * qOut * qSide
+         + par[8] * qOut * qLong
+         + par[9] * qSide * qLong;
 }
 
 double Background3DValue(const TH3D& h,
@@ -164,18 +179,36 @@ double Background3DValue(const TH3D& h,
     const double qOut = h.GetXaxis()->GetBinCenter(ix);
     const double qSide = h.GetYaxis()->GetBinCenter(iy);
     const double qLong = h.GetZaxis()->GetBinCenter(iz);
-    return Background3DValue(qOut, qSide, qLong, par[4]);
+    return Background3DValue(qOut, qSide, qLong, par + 4);
 }
 
 double Background3DRejectFemtoTF3(double* x, double* par)
 {
-    if(std::fabs(x[0]) * gBkgQAxisScaleToMeV < gBkgRejectQminMeV ||
-       std::fabs(x[1]) * gBkgQAxisScaleToMeV < gBkgRejectQminMeV ||
-       std::fabs(x[2]) * gBkgQAxisScaleToMeV < gBkgRejectQminMeV){
+    const double qOut = std::fabs(x[0]) * gBkgQAxisScaleToMeV;
+    const double qSide = std::fabs(x[1]) * gBkgQAxisScaleToMeV;
+    const double qLong = std::fabs(x[2]) * gBkgQAxisScaleToMeV;
+
+    const bool inPure3DCorner =
+        qOut >= gBkgRejectQminMeV &&
+        qSide >= gBkgRejectQminMeV &&
+        qLong >= gBkgRejectQminMeV;
+    const bool inOutSlice =
+        qOut >= gBkgRejectQminMeV &&
+        qSide <= gBkgSliceCutMeV &&
+        qLong <= gBkgSliceCutMeV;
+    const bool inSideSlice =
+        qSide >= gBkgRejectQminMeV &&
+        qOut <= gBkgSliceCutMeV &&
+        qLong <= gBkgSliceCutMeV;
+    const bool inLongSlice =
+        qLong >= gBkgRejectQminMeV &&
+        qOut <= gBkgSliceCutMeV &&
+        qSide <= gBkgSliceCutMeV;
+
+    if(!inPure3DCorner && !inOutSlice && !inSideSlice && !inLongSlice){
         TF1::RejectPoint();
     }
-    return Background3DValue(x[0], x[1], x[2],
-                             par[0]);
+    return Background3DValue(x[0], x[1], x[2], par);
 }
 
 DLM_Histo<double>* MakeDlmFeedDownFractionFromLambdaTH1(const TH1* hLambda,
@@ -288,7 +321,7 @@ void PrintLambdaFeedDownSummary(const FitState3D& st)
     }
 }
 
-void NormalizeCk3D(TH3D* h, const FitCATS3DConfig& cfg)
+double NormalizeCk3D(TH3D* h, const FitCATS3DConfig& cfg)
 {
     double sumW = 0.0;
     double sumWC = 0.0;
@@ -312,13 +345,15 @@ void NormalizeCk3D(TH3D* h, const FitCATS3DConfig& cfg)
 
     if(sumW <= 0.0){
         std::cout << "WARNING NormalizeCk3D: no bins in normalization window; data is left unscaled.\n";
-        return;
+        return 1.0;
     }
 
     const double norm = sumWC / sumW;
     if(norm > 0.0 && std::isfinite(norm)){
         h->Scale(1.0 / norm);
+        return norm;
     }
+    return 1.0;
 }
 
 double MeanInNormWindow3D(const TH3D& h,
@@ -368,6 +403,167 @@ void NormalizeModelCk3D(TH3D* model,
     }
 }
 
+void PrintAxisMirrorCheck(const TAxis* axis,
+                          const TString& label,
+                          const double scaleToMeV)
+{
+    if(!axis) return;
+
+    double maxAbsPairSum = 0.0;
+    int worstLow = -1;
+    int worstHigh = -1;
+    const int nBins = axis->GetNbins();
+    const int nPairs = nBins / 2;
+
+    std::cout << "CATS3D q-axis mirror check " << label
+              << ": nbins=" << nBins
+              << " range=[" << axis->GetXmin() << ", " << axis->GetXmax()
+              << "] centers in MeV\n";
+
+    for(int iPair=1; iPair<=nPairs; ++iPair){
+        const int iLow = iPair;
+        const int iHigh = nBins + 1 - iPair;
+        const double low = axis->GetBinCenter(iLow) * scaleToMeV;
+        const double high = axis->GetBinCenter(iHigh) * scaleToMeV;
+        const double pairSum = low + high;
+        if(std::fabs(pairSum) > maxAbsPairSum){
+            maxAbsPairSum = std::fabs(pairSum);
+            worstLow = iLow;
+            worstHigh = iHigh;
+        }
+        if(iPair <= 3 || iPair > nPairs - 3){
+            std::cout << "  pair bins " << iLow << "/" << iHigh
+                      << ": " << low << " + " << high
+                      << " = " << pairSum << " MeV\n";
+        }
+    }
+
+    if(nBins % 2 == 1){
+        const int centerBin = (nBins + 1) / 2;
+        std::cout << "  center bin " << centerBin
+                  << ": " << axis->GetBinCenter(centerBin) * scaleToMeV
+                  << " MeV\n";
+    }
+
+    std::cout << "  worst mirror mismatch: "
+              << maxAbsPairSum << " MeV";
+    if(worstLow > 0){
+        std::cout << " at bins " << worstLow << "/" << worstHigh;
+    }
+    std::cout << "\n";
+}
+
+int MirrorBin(const TAxis* axis, const int bin)
+{
+    if(!axis) return bin;
+    const double center = axis->GetBinCenter(bin);
+    return axis->FindBin(-center);
+}
+
+TH3D* BuildParityDiff3D(const TH3D& h,
+                        const TString& name,
+                        const TString& mode)
+{
+    TH3D* diff = dynamic_cast<TH3D*>(h.Clone(name));
+    diff->SetDirectory(nullptr);
+    diff->Reset("ICES");
+
+    for(int ix=1; ix<=h.GetNbinsX(); ++ix){
+        const int mx = mode.Contains("out") || mode.EqualTo("full")
+                     ? MirrorBin(h.GetXaxis(), ix) : ix;
+        for(int iy=1; iy<=h.GetNbinsY(); ++iy){
+            const int my = mode.Contains("side") || mode.EqualTo("full")
+                         ? MirrorBin(h.GetYaxis(), iy) : iy;
+            for(int iz=1; iz<=h.GetNbinsZ(); ++iz){
+                const int mz = mode.Contains("long") || mode.EqualTo("full")
+                             ? MirrorBin(h.GetZaxis(), iz) : iz;
+                const double value = h.GetBinContent(ix, iy, iz) -
+                                     h.GetBinContent(mx, my, mz);
+                diff->SetBinContent(ix, iy, iz, value);
+            }
+        }
+    }
+
+    return diff;
+}
+
+void PrintModelParityCheck(const TH3D& h,
+                           const TString& label,
+                           const FitCATS3DConfig& cfg)
+{
+    if(!cfg.DebugQSymmetry) return;
+
+    struct ParityMode {
+        const char* name;
+        const char* mode;
+    };
+    const ParityMode modes[] = {
+        {"out", "out"},
+        {"side", "side"},
+        {"long", "long"},
+        {"full", "full"}
+    };
+
+    for(const ParityMode& parityMode : modes){
+        double maxAbsDiff = 0.0;
+        double maxRelDiff = 0.0;
+        int wx = -1;
+        int wy = -1;
+        int wz = -1;
+        int wmx = -1;
+        int wmy = -1;
+        int wmz = -1;
+
+        for(int ix=1; ix<=h.GetNbinsX(); ++ix){
+            const int mx = TString(parityMode.mode).Contains("out") ||
+                           TString(parityMode.mode).EqualTo("full")
+                         ? MirrorBin(h.GetXaxis(), ix) : ix;
+            for(int iy=1; iy<=h.GetNbinsY(); ++iy){
+                const int my = TString(parityMode.mode).Contains("side") ||
+                               TString(parityMode.mode).EqualTo("full")
+                             ? MirrorBin(h.GetYaxis(), iy) : iy;
+                for(int iz=1; iz<=h.GetNbinsZ(); ++iz){
+                    const int mz = TString(parityMode.mode).Contains("long") ||
+                                   TString(parityMode.mode).EqualTo("full")
+                                 ? MirrorBin(h.GetZaxis(), iz) : iz;
+                    const double c = h.GetBinContent(ix, iy, iz);
+                    const double cm = h.GetBinContent(mx, my, mz);
+                    const double diff = c - cm;
+                    const double absDiff = std::fabs(diff);
+                    const double denom = 0.5 * (std::fabs(c) + std::fabs(cm));
+                    const double relDiff = denom > 0.0 ? absDiff / denom : 0.0;
+                    if(absDiff > maxAbsDiff){
+                        maxAbsDiff = absDiff;
+                        maxRelDiff = relDiff;
+                        wx = ix;
+                        wy = iy;
+                        wz = iz;
+                        wmx = mx;
+                        wmy = my;
+                        wmz = mz;
+                    }
+                }
+            }
+        }
+
+        std::cout << "CATS3D model parity check " << label
+                  << " mode=" << parityMode.name
+                  << ": maxAbsDiff=" << maxAbsDiff
+                  << " maxRelDiff=" << maxRelDiff;
+        if(wx > 0){
+            std::cout << " at bin (" << wx << "," << wy << "," << wz << ")"
+                      << " q=(" << h.GetXaxis()->GetBinCenter(wx)
+                      << "," << h.GetYaxis()->GetBinCenter(wy)
+                      << "," << h.GetZaxis()->GetBinCenter(wz) << ")"
+                      << " mirror bin (" << wmx << "," << wmy << "," << wmz << ")"
+                      << " mirror q=(" << h.GetXaxis()->GetBinCenter(wmx)
+                      << "," << h.GetYaxis()->GetBinCenter(wmy)
+                      << "," << h.GetZaxis()->GetBinCenter(wmz) << ")";
+        }
+        std::cout << "\n";
+    }
+}
+
 void PrefitBackground3D(FitState3D& state)
 {
     const FitCATS3DConfig& cfg = state.cfg;
@@ -376,25 +572,43 @@ void PrefitBackground3D(FitState3D& state)
     TH3D* data = state.data;
     gBkgRejectQminMeV = cfg.BackgroundNonFemtoQminMeV;
     gBkgQAxisScaleToMeV = cfg.qAxisScaleToMeV;
+    gBkgSliceCutMeV = cfg.sliceCutAbs * cfg.qAxisScaleToMeV;
 
     TF3 baseline("fCATS3D_background_prefit",
                  Background3DRejectFemtoTF3,
                  data->GetXaxis()->GetXmin(), data->GetXaxis()->GetXmax(),
                  data->GetYaxis()->GetXmin(), data->GetYaxis()->GetXmax(),
                  data->GetZaxis()->GetXmin(), data->GetZaxis()->GetXmax(),
-                 1);
-    baseline.SetParName(0, "BkgNorm");
-    baseline.SetParameter(0, state.BkgNormInit);
+                 10);
+    const char* parNames[10] = {
+        "BkgP0", "BkgOut", "BkgSide", "BkgLong",
+        "BkgOut2", "BkgSide2", "BkgLong2",
+        "BkgOutSide", "BkgOutLong", "BkgSideLong"
+    };
+    for(int iPar=0; iPar<10; ++iPar){
+        baseline.SetParName(iPar, parNames[iPar]);
+        baseline.SetParameter(iPar, state.BkgParInit[iPar]);
+    }
     baseline.SetParLimits(0, 0.5, 1.5);
 
     const int fitStatus = data->Fit(&baseline, "RQ0");
-    state.BkgNormInit = baseline.GetParameter(0);
+    for(int iPar=0; iPar<10; ++iPar){
+        state.BkgParInit[iPar] = baseline.GetParameter(iPar);
+    }
+    state.BkgNormInit = state.BkgParInit[0];
 
     std::cout << "CATS3D background prefit: "
-              << "Norm=" << state.BkgNormInit
+              << "pol2 p0=" << state.BkgParInit[0]
+              << " p1=" << state.BkgParInit[1]
+              << " p2=" << state.BkgParInit[2]
+              << " p3=" << state.BkgParInit[3]
               << " status=" << fitStatus
-              << " region |q_out,side,long| > "
-              << cfg.BackgroundNonFemtoQminMeV << " MeV\n";
+              << " region hybrid non-femto: pure 3D corner |q_all| >= "
+              << cfg.BackgroundNonFemtoQminMeV
+              << " MeV OR projection slice |q_target| >= "
+              << cfg.BackgroundNonFemtoQminMeV
+              << " MeV with other two |q| <= "
+              << gBkgSliceCutMeV << " MeV\n";
 }
 
 void ConfigureKittyForData(CATS3D& kitty,
@@ -402,6 +616,12 @@ void ConfigureKittyForData(CATS3D& kitty,
                            const FitCATS3DConfig& cfg,
                            DLM_CleverReso3D* resonanceSource)
 {
+    if(cfg.DebugQSymmetry){
+        PrintAxisMirrorCheck(data.GetXaxis(), "data q_out", cfg.qAxisScaleToMeV);
+        PrintAxisMirrorCheck(data.GetYaxis(), "data q_side", cfg.qAxisScaleToMeV);
+        PrintAxisMirrorCheck(data.GetZaxis(), "data q_long", cfg.qAxisScaleToMeV);
+    }
+
     kitty.SetMomBinsOut(data.GetNbinsX(),
                         data.GetXaxis()->GetXmin()*cfg.qAxisScaleToMeV,
                         data.GetXaxis()->GetXmax()*cfg.qAxisScaleToMeV);
@@ -483,6 +703,7 @@ TH3D* BuildModelFromKitty(const TH3D& data,
     }
 
     NormalizeModelCk3D(model, data, st.cfg);
+    // PrintModelParityCheck(*model, name, st.cfg);
     return model;
 }
 
@@ -620,16 +841,13 @@ double ComputeChi2ForPars(const double* par)
 
     double chi2 = 0.0;
     int nBins = 0;
+    const bool usePml = st.cfg.UsePmlChi2 && st.same && st.mixed;
 
     const auto tLoop0 = Clock3D::now();
     for(int ix=1; ix<=data.GetNbinsX(); ++ix){
         for(int iy=1; iy<=data.GetNbinsY(); ++iy){
             for(int iz=1; iz<=data.GetNbinsZ(); ++iz){
                 if(!IsInsideFitBoxMeV(&data, ix, iy, iz, st.cfg)) continue;
-
-                const double y = data.GetBinContent(ix, iy, iz);
-                const double e = data.GetBinError(ix, iy, iz);
-                if(!std::isfinite(y) || !std::isfinite(e) || e <= 0.0) continue;
 
                 double background = par[4];
                 if(st.cfg.UseBackground){
@@ -638,8 +856,39 @@ double ComputeChi2ForPars(const double* par)
                 if(!std::isfinite(background) || background <= 0.0) continue;
 
                 const double model = background * catsModel->GetBinContent(ix, iy, iz);
-                const double pull = (y - model) / e;
-                chi2 += pull*pull;
+                if(!std::isfinite(model) || model <= 0.0) continue;
+
+                if(usePml){
+                    const double same = st.same->GetBinContent(ix, iy, iz);
+                    const double mixed = st.mixed->GetBinContent(ix, iy, iz) *
+                                         st.DataNormFactor;
+                    if(!std::isfinite(same) || !std::isfinite(mixed)) continue;
+                    if(same < 0.0 || mixed < 0.0) continue;
+                    const double total = same + mixed;
+                    if(total <= 0.0) continue;
+
+                    double logLike = 0.0;
+                    if(same > 0.0){
+                        const double argSame =
+                            model * total / (same * (model + 1.0));
+                        if(argSame <= 0.0 || !std::isfinite(argSame)) continue;
+                        logLike += same * std::log(argSame);
+                    }
+                    if(mixed > 0.0){
+                        const double argMixed =
+                            total / (mixed * (model + 1.0));
+                        if(argMixed <= 0.0 || !std::isfinite(argMixed)) continue;
+                        logLike += mixed * std::log(argMixed);
+                    }
+                    chi2 += -2.0 * logLike;
+                }
+                else {
+                    const double y = data.GetBinContent(ix, iy, iz);
+                    const double e = data.GetBinError(ix, iy, iz);
+                    if(!std::isfinite(y) || !std::isfinite(e) || e <= 0.0) continue;
+                    const double pull = (y - model) / e;
+                    chi2 += pull*pull;
+                }
                 ++nBins;
             }
         }
@@ -700,11 +949,46 @@ TH1D* ProjectFemtoSlice1D(TH3D* h3,
             lastBin = centerBin;
         }
     };
+    auto printSliceAxisCheck = [](TAxis* axis,
+                                  const TString& axisName,
+                                  const TString& histName,
+                                  const int firstBin,
+                                  const int lastBin) {
+        if(!gFitState3D || !gFitState3D->cfg.DebugQSymmetry || !axis) return;
+        static int nPrint = 0;
+        if(nPrint >= 24) return;
+        ++nPrint;
+
+        std::cout << "CATS3D projection slice mirror check "
+                  << histName << " axis=" << axisName
+                  << " bins " << firstBin << "-" << lastBin
+                  << " centers:";
+        for(int iBin=firstBin; iBin<=lastBin; ++iBin){
+            std::cout << " " << axis->GetBinCenter(iBin);
+        }
+        std::cout << "\n";
+
+        for(int iBin=firstBin; iBin<=lastBin; ++iBin){
+            const double center = axis->GetBinCenter(iBin);
+            const int mirrorBin = axis->FindBin(-center);
+            const bool mirrorInside = mirrorBin >= firstBin && mirrorBin <= lastBin;
+            const double mirrorCenter = axis->GetBinCenter(mirrorBin);
+            std::cout << "  bin " << iBin
+                      << " q=" << center
+                      << " mirrorBin=" << mirrorBin
+                      << " mirrorQ=" << mirrorCenter
+                      << " q+mirrorQ=" << center + mirrorCenter
+                      << " insideSlice=" << (mirrorInside ? "yes" : "no")
+                      << "\n";
+        }
+    };
 
     if(target.EqualTo("out")){
         int y1, y2, z1, z2;
         centeredBinRange(h3->GetYaxis(), sliceCutAbs, y1, y2);
         centeredBinRange(h3->GetZaxis(), sliceCutAbs, z1, z2);
+        // printSliceAxisCheck(h3->GetYaxis(), "q_side", name, y1, y2);
+        // printSliceAxisCheck(h3->GetZaxis(), "q_long", name, z1, z2);
 
         h1 = dynamic_cast<TH1D*>(h3->ProjectionX(name, y1, y2, z1, z2, "e"));
         const int numBins = (y2-y1+1) * (z2-z1+1);
@@ -714,6 +998,8 @@ TH1D* ProjectFemtoSlice1D(TH3D* h3,
         int x1, x2, z1, z2;
         centeredBinRange(h3->GetXaxis(), sliceCutAbs, x1, x2);
         centeredBinRange(h3->GetZaxis(), sliceCutAbs, z1, z2);
+        // printSliceAxisCheck(h3->GetXaxis(), "q_out", name, x1, x2);
+        // printSliceAxisCheck(h3->GetZaxis(), "q_long", name, z1, z2);
 
         h1 = dynamic_cast<TH1D*>(h3->ProjectionY(name, x1, x2, z1, z2, "e"));
         const int numBins = (x2-x1+1) * (z2-z1+1);
@@ -723,6 +1009,8 @@ TH1D* ProjectFemtoSlice1D(TH3D* h3,
         int x1, x2, y1, y2;
         centeredBinRange(h3->GetXaxis(), sliceCutAbs, x1, x2);
         centeredBinRange(h3->GetYaxis(), sliceCutAbs, y1, y2);
+        // printSliceAxisCheck(h3->GetXaxis(), "q_out", name, x1, x2);
+        // printSliceAxisCheck(h3->GetYaxis(), "q_side", name, y1, y2);
 
         h1 = dynamic_cast<TH1D*>(h3->ProjectionZ(name, x1, x2, y1, y2, "e"));
         const int numBins = (x2-x1+1) * (y2-y1+1);
@@ -757,6 +1045,122 @@ void WriteFemtoSliceProjections(TH3D* h3,
     hOut->Write("", TObject::kOverwrite);
     hSide->Write("", TObject::kOverwrite);
     hLong->Write("", TObject::kOverwrite);
+}
+
+TH1D* ProjectMixedWeightedSlice1D(TH3D* hCk,
+                                  TH3D* hWeight,
+                                  const TString& target,
+                                  const TString& name,
+                                  const double sliceCutAbs)
+{
+    if(!hCk || !hWeight){
+        throw std::runtime_error("ProjectMixedWeightedSlice1D: null input histogram.");
+    }
+
+    std::unique_ptr<TH1D> hWeightedSum;
+    std::unique_ptr<TH1D> hWeightSum;
+
+    auto centeredBinRange = [](TAxis* axis, const double cutAbs, int& firstBin, int& lastBin) {
+        firstBin = 1;
+        lastBin = 0;
+        for(int iBin=1; iBin<=axis->GetNbins(); ++iBin){
+            if(std::fabs(axis->GetBinCenter(iBin)) <= cutAbs + 1e-12){
+                if(lastBin == 0) firstBin = iBin;
+                lastBin = iBin;
+            }
+        }
+        if(lastBin == 0){
+            const int centerBin = axis->FindBin(0.0);
+            firstBin = centerBin;
+            lastBin = centerBin;
+        }
+    };
+
+    TH3D* hWeighted3D = dynamic_cast<TH3D*>(hCk->Clone(name + "_weighted3D"));
+    hWeighted3D->SetDirectory(nullptr);
+    hWeighted3D->Multiply(hWeight);
+
+    if(target.EqualTo("out")){
+        int y1, y2, z1, z2;
+        centeredBinRange(hCk->GetYaxis(), sliceCutAbs, y1, y2);
+        centeredBinRange(hCk->GetZaxis(), sliceCutAbs, z1, z2);
+        hWeightedSum.reset(dynamic_cast<TH1D*>(hWeighted3D->ProjectionX(name + "_weightedSum", y1, y2, z1, z2, "e")));
+        hWeightSum.reset(dynamic_cast<TH1D*>(hWeight->ProjectionX(name + "_weightSum", y1, y2, z1, z2, "e")));
+    }
+    else if(target.EqualTo("side")){
+        int x1, x2, z1, z2;
+        centeredBinRange(hCk->GetXaxis(), sliceCutAbs, x1, x2);
+        centeredBinRange(hCk->GetZaxis(), sliceCutAbs, z1, z2);
+        hWeightedSum.reset(dynamic_cast<TH1D*>(hWeighted3D->ProjectionY(name + "_weightedSum", x1, x2, z1, z2, "e")));
+        hWeightSum.reset(dynamic_cast<TH1D*>(hWeight->ProjectionY(name + "_weightSum", x1, x2, z1, z2, "e")));
+    }
+    else if(target.EqualTo("long")){
+        int x1, x2, y1, y2;
+        centeredBinRange(hCk->GetXaxis(), sliceCutAbs, x1, x2);
+        centeredBinRange(hCk->GetYaxis(), sliceCutAbs, y1, y2);
+        hWeightedSum.reset(dynamic_cast<TH1D*>(hWeighted3D->ProjectionZ(name + "_weightedSum", x1, x2, y1, y2, "e")));
+        hWeightSum.reset(dynamic_cast<TH1D*>(hWeight->ProjectionZ(name + "_weightSum", x1, x2, y1, y2, "e")));
+    }
+    else {
+        delete hWeighted3D;
+        throw std::runtime_error(Form("ProjectMixedWeightedSlice1D: unknown target '%s'", target.Data()));
+    }
+
+    delete hWeighted3D;
+
+    if(!hWeightedSum || !hWeightSum){
+        throw std::runtime_error(Form("ProjectMixedWeightedSlice1D: failed for target '%s'", target.Data()));
+    }
+
+    hWeightedSum->SetDirectory(nullptr);
+    hWeightSum->SetDirectory(nullptr);
+
+    TH1D* hOut = dynamic_cast<TH1D*>(hWeightedSum->Clone(name));
+    hOut->SetDirectory(nullptr);
+    hOut->Divide(hWeightedSum.get(), hWeightSum.get(), 1.0, 1.0);
+    return hOut;
+}
+
+void WriteMixedWeightedFemtoSliceProjections(TH3D* hCk,
+                                             TH3D* hWeight,
+                                             const TString& baseName,
+                                             const double sliceCutAbs)
+{
+    if(!hCk || !hWeight) return;
+
+    std::unique_ptr<TH1D> hOut(ProjectMixedWeightedSlice1D(
+        hCk, hWeight, "out", baseName + "_mixedWeighted_proj_out", sliceCutAbs));
+    std::unique_ptr<TH1D> hSide(ProjectMixedWeightedSlice1D(
+        hCk, hWeight, "side", baseName + "_mixedWeighted_proj_side", sliceCutAbs));
+    std::unique_ptr<TH1D> hLong(ProjectMixedWeightedSlice1D(
+        hCk, hWeight, "long", baseName + "_mixedWeighted_proj_long", sliceCutAbs));
+
+    hOut->Write("", TObject::kOverwrite);
+    hSide->Write("", TObject::kOverwrite);
+    hLong->Write("", TObject::kOverwrite);
+}
+
+TH3D* LoadMixedWeightForProjection(const FitCATS3DConfig& cfg)
+{
+    if(!cfg.UseSameMixed) return nullptr;
+
+    TFile fin(cfg.InputFileName, "READ");
+    if(fin.IsZombie()){
+        std::cout << "WARNING LoadMixedWeightForProjection: cannot open "
+                  << cfg.InputFileName << "\n";
+        return nullptr;
+    }
+
+    TH3D* hMixedIn = dynamic_cast<TH3D*>(fin.Get(cfg.MixedHistoName));
+    if(!hMixedIn){
+        std::cout << "WARNING LoadMixedWeightForProjection: missing "
+                  << cfg.MixedHistoName << "\n";
+        return nullptr;
+    }
+
+    TH3D* hMixed = RebinClone3D(hMixedIn, cfg.RebinFactor,
+                                "hMixed3D_projectionWeight");
+    return hMixed;
 }
 
 TH3D* BuildLambdaMainMap3D(const TH3D& data)
@@ -820,8 +1224,13 @@ void SaveFitOutput(const FitCATS3DConfig& cfg,
     background->SetDirectory(nullptr);
     background->Reset("ICES");
 
-    const double pars[5] = {result.Rout, result.Rside, result.Rlong,
-                            result.Alpha, result.Norm};
+    const double pars[14] = {result.Rout, result.Rside, result.Rlong,
+                             result.Alpha,
+                             result.BkgPar[0], result.BkgPar[1],
+                             result.BkgPar[2], result.BkgPar[3],
+                             result.BkgPar[4], result.BkgPar[5],
+                             result.BkgPar[6], result.BkgPar[7],
+                             result.BkgPar[8], result.BkgPar[9]};
 
     for(int ix=1; ix<=model->GetNbinsX(); ++ix){
         for(int iy=1; iy<=model->GetNbinsY(); ++iy){
@@ -856,10 +1265,35 @@ void SaveFitOutput(const FitCATS3DConfig& cfg,
 
     TFile fout(cfg.OutputFileName, "RECREATE");
     data->Write("hDataCk3D");
+    if(gFitState3D && gFitState3D->same && gFitState3D->mixed){
+        gFitState3D->same->Write("hSame3D_forPML", TObject::kOverwrite);
+        gFitState3D->mixed->Write("hMixed3D_forPML_raw", TObject::kOverwrite);
+        std::unique_ptr<TH3D> mixedScaled(dynamic_cast<TH3D*>(
+            gFitState3D->mixed->Clone("hMixed3D_forPML_scaledByDataNorm")));
+        mixedScaled->SetDirectory(nullptr);
+        mixedScaled->Scale(gFitState3D->DataNormFactor);
+        mixedScaled->Write("", TObject::kOverwrite);
+    }
     modelShape->Write("hCATS3D_shape");
     background->Write("hCATS3D_background");
     model->Write("hCATS3D_best");
     ratio->Write("hDataOverCATS3D");
+    std::unique_ptr<TH3D> shapeDiffOut(BuildParityDiff3D(*modelShape, "hCATS3D_shape_parityDiff_out", "out"));
+    std::unique_ptr<TH3D> shapeDiffSide(BuildParityDiff3D(*modelShape, "hCATS3D_shape_parityDiff_side", "side"));
+    std::unique_ptr<TH3D> shapeDiffLong(BuildParityDiff3D(*modelShape, "hCATS3D_shape_parityDiff_long", "long"));
+    std::unique_ptr<TH3D> shapeDiffFull(BuildParityDiff3D(*modelShape, "hCATS3D_shape_parityDiff_full", "full"));
+    std::unique_ptr<TH3D> bestDiffOut(BuildParityDiff3D(*model, "hCATS3D_best_parityDiff_out", "out"));
+    std::unique_ptr<TH3D> bestDiffSide(BuildParityDiff3D(*model, "hCATS3D_best_parityDiff_side", "side"));
+    std::unique_ptr<TH3D> bestDiffLong(BuildParityDiff3D(*model, "hCATS3D_best_parityDiff_long", "long"));
+    std::unique_ptr<TH3D> bestDiffFull(BuildParityDiff3D(*model, "hCATS3D_best_parityDiff_full", "full"));
+    shapeDiffOut->Write("", TObject::kOverwrite);
+    shapeDiffSide->Write("", TObject::kOverwrite);
+    shapeDiffLong->Write("", TObject::kOverwrite);
+    shapeDiffFull->Write("", TObject::kOverwrite);
+    bestDiffOut->Write("", TObject::kOverwrite);
+    bestDiffSide->Write("", TObject::kOverwrite);
+    bestDiffLong->Write("", TObject::kOverwrite);
+    bestDiffFull->Write("", TObject::kOverwrite);
     std::unique_ptr<TH3D> lambdaMap(BuildLambdaMainMap3D(*data));
     if(lambdaMap){
         lambdaMap->Write("hLambdaMain3D");
@@ -876,11 +1310,40 @@ void SaveFitOutput(const FitCATS3DConfig& cfg,
     WriteFemtoSliceProjections(model.get(), "hCATS3D_best", cfg.sliceCutAbs);
     WriteFemtoSliceProjections(ratio.get(), "hDataOverCATS3D", cfg.sliceCutAbs);
 
+    std::unique_ptr<TH3D> mixedWeight(LoadMixedWeightForProjection(cfg));
+    if(mixedWeight){
+        mixedWeight->Write("hMixed3D_projectionWeight", TObject::kOverwrite);
+        WriteMixedWeightedFemtoSliceProjections(data, mixedWeight.get(),
+                                                "hDataCk3D", cfg.sliceCutAbs);
+        WriteMixedWeightedFemtoSliceProjections(modelShape.get(), mixedWeight.get(),
+                                                "hCATS3D_shape", cfg.sliceCutAbs);
+        WriteMixedWeightedFemtoSliceProjections(model.get(), mixedWeight.get(),
+                                                "hCATS3D_best", cfg.sliceCutAbs);
+        std::cout << "CATS3D wrote mixed-weighted slice projections for data/model.\n";
+    }
+
     TNtuple summary("fit_summary", "fit_summary",
-                    "Rout:Rside:Rlong:Alpha:Norm:Chi2:Ndf:Chi2Ndf:NFitBins:FitStatus");
-    summary.Fill(result.Rout, result.Rside, result.Rlong, result.Alpha, result.Norm,
-                 result.Chi2, result.Ndf, result.Chi2Ndf(),
-                 result.NFitBins, result.FitStatus);
+                    "Rout:Rside:Rlong:Alpha:Norm:Chi2:Ndf:Chi2Ndf:NFitBins:"
+                    "FitStatus:MinuitIstat:FitQuality:MinuitAmin:MinuitEdm:"
+                    "MinuitErrDef:MinuitNvpar:MinuitNparx:"
+                    "BkgP0:BkgOut:BkgSide:BkgLong:"
+                    "BkgOut2:BkgSide2:BkgLong2:"
+                    "BkgOutSide:BkgOutLong:BkgSideLong");
+    Float_t summaryValues[27] = {
+        float(result.Rout), float(result.Rside), float(result.Rlong),
+        float(result.Alpha), float(result.Norm), float(result.Chi2),
+        float(result.Ndf), float(result.Chi2Ndf()), float(result.NFitBins),
+        float(result.FitStatus), float(result.MinuitIstat),
+        float(result.FitQuality), float(result.MinuitAmin),
+        float(result.MinuitEdm), float(result.MinuitErrDef),
+        float(result.MinuitNvpar), float(result.MinuitNparx),
+        float(result.BkgPar[0]), float(result.BkgPar[1]),
+        float(result.BkgPar[2]), float(result.BkgPar[3]),
+        float(result.BkgPar[4]), float(result.BkgPar[5]),
+        float(result.BkgPar[6]), float(result.BkgPar[7]),
+        float(result.BkgPar[8]), float(result.BkgPar[9])
+    };
+    summary.Fill(summaryValues);
     summary.Write();
 }
 
@@ -893,6 +1356,7 @@ void PrintFitProfile3D(const FitState3D& state)
               << "  setup: data=" << p.BuildDataSec
               << " s, resonanceSource=" << p.BuildResonanceSourceSec
               << " s, configureKitty=" << p.ConfigureKittySec
+              << " s, externalKernel=" << p.LoadExternalKernelSec
               << " s, lambda=" << p.LoadLambdaSec << " s\n"
               << "  minuit=" << p.MinuitSec
               << " s, finalChi2=" << p.FinalChi2Sec
@@ -915,10 +1379,13 @@ void PrintFitProfile3D(const FitState3D& state)
               << " s / " << p.Chi2Calls << " calls\n";
 }
 
-} // namespace
-
-TH3D* BuildDataCk3D(const FitCATS3DConfig& cfg)
+TH3D* BuildDataCk3DInternal(const FitCATS3DConfig& cfg,
+                            std::unique_ptr<TH3D>* sameForPml,
+                            std::unique_ptr<TH3D>* mixedForPml,
+                            double* normFactor)
 {
+    if(normFactor) *normFactor = 1.0;
+
     TFile fin(cfg.InputFileName, "READ");
     if(fin.IsZombie()){
         throw std::runtime_error(Form("BuildDataCk3D: cannot open '%s'", cfg.InputFileName.Data()));
@@ -935,6 +1402,15 @@ TH3D* BuildDataCk3D(const FitCATS3DConfig& cfg)
         std::unique_ptr<TH3D> hMixedFit(RebinClone3D(hMixed.get(), cfg.RebinFactor,
                                                      "hMixed3D_forCk_rebin"));
 
+        if(sameForPml){
+            sameForPml->reset(dynamic_cast<TH3D*>(hSameFit->Clone("hSame3D_forPML")));
+            (*sameForPml)->SetDirectory(nullptr);
+        }
+        if(mixedForPml){
+            mixedForPml->reset(dynamic_cast<TH3D*>(hMixedFit->Clone("hMixed3D_forPML")));
+            (*mixedForPml)->SetDirectory(nullptr);
+        }
+
         hCk = dynamic_cast<TH3D*>(hSameFit->Clone("hDataCk3D"));
         hCk->SetDirectory(nullptr);
         hCk->Divide(hSameFit.get(), hMixedFit.get(), 1.0, 1.0);
@@ -948,9 +1424,17 @@ TH3D* BuildDataCk3D(const FitCATS3DConfig& cfg)
     }
 
     if(cfg.NormalizeDataInNormWindow){
-        NormalizeCk3D(hCk, cfg);
+        const double norm = NormalizeCk3D(hCk, cfg);
+        if(normFactor) *normFactor = norm;
     }
     return hCk;
+}
+
+} // namespace
+
+TH3D* BuildDataCk3D(const FitCATS3DConfig& cfg)
+{
+    return BuildDataCk3DInternal(cfg, nullptr, nullptr, nullptr);
 }
 
 namespace {
@@ -959,12 +1443,18 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
                                   DLM_CleverReso3D* resonanceSource)
 {
     const auto tData0 = Clock3D::now();
-    std::unique_ptr<TH3D> data(BuildDataCk3D(cfg));
+    std::unique_ptr<TH3D> sameForPml;
+    std::unique_ptr<TH3D> mixedForPml;
+    double dataNormFactor = 1.0;
+    std::unique_ptr<TH3D> data(BuildDataCk3DInternal(cfg, &sameForPml,
+                                                     &mixedForPml,
+                                                     &dataNormFactor));
     CATS3D kitty;
 
     FitState3D state;
     state.cfg = cfg;
     state.Profile.BuildDataSec = SecondsSince(tData0);
+    state.DataNormFactor = dataNormFactor;
 
     if(cfg.UseResonanceSource && !resonanceSource){
         throw std::runtime_error("FitDataCATS3D: UseResonanceSource=true requires a prepared DLM_CleverReso3D source. Build it in the macro and pass it to FitDataCATS3D(cfg, source).");
@@ -976,9 +1466,36 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
     ConfigureKittyForData(kitty, *data, cfg, state.ResonanceSource);
     state.Profile.ConfigureKittySec = SecondsSince(tConfig0);
 
+    if(cfg.UseExternalFastKernel){
+        if(!cfg.UseFastKernel){
+            throw std::runtime_error("FitDataCATS3D: UseExternalFastKernel requires UseFastKernel=true.");
+        }
+        if(!cfg.ExternalFastKernelFileName.Length()){
+            throw std::runtime_error("FitDataCATS3D: ExternalFastKernelFileName is empty.");
+        }
+        const auto tKernel0 = Clock3D::now();
+        const bool loaded = cfg.ExternalFastKernelByQ
+            ? LoadCATS3DFastKernelByQ(kitty,
+                                      cfg.ExternalFastKernelFileName,
+                                      cfg.ExternalFastKernelTreeName)
+            : LoadCATS3DFastKernel(kitty,
+                                   cfg.ExternalFastKernelFileName,
+                                   cfg.ExternalFastKernelTreeName);
+        state.Profile.LoadExternalKernelSec = SecondsSince(tKernel0);
+        if(!loaded){
+            throw std::runtime_error(Form("FitDataCATS3D: failed to load external fast kernel '%s'.",
+                                          cfg.ExternalFastKernelFileName.Data()));
+        }
+        std::cout << "CATS3D external fast kernel loaded in "
+                  << state.Profile.LoadExternalKernelSec << " s\n";
+    }
+
     state.data = data.get();
+    state.same = sameForPml.get();
+    state.mixed = mixedForPml.get();
     state.kitty = &kitty;
     state.BkgNormInit = cfg.NormInit;
+    state.BkgParInit[0] = cfg.NormInit;
     PrefitBackground3D(state);
 
     const auto tLambda0 = Clock3D::now();
@@ -992,8 +1509,13 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
                   << "\n";
         PrintLambdaFeedDownSummary(state);
     }
+    std::cout << "CATS3D objective: "
+              << ((cfg.UsePmlChi2 && state.same && state.mixed)
+                  ? "Poisson maximum-likelihood chi2_PML"
+                  : "Gaussian chi2 on normalized Ck")
+              << " dataNormFactor=" << state.DataNormFactor << "\n";
 
-    TMinuit minuit(5);
+    TMinuit minuit(14);
     minuit.SetFCN(FitFCN3D);
     minuit.SetPrintLevel(1);
 
@@ -1001,15 +1523,30 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
     Int_t ierflg = 0;
     minuit.mnexcm("SET ERR", arglist, 1, ierflg);
 
-    minuit.DefineParameter(0, "Rout",  cfg.RoutInit,  0.1,
+    minuit.DefineParameter(0, "Rout",  cfg.RoutInit,  cfg.MinuitRadiusStep,
                            cfg.RadiusMinFm, cfg.RadiusMaxFm);
-    minuit.DefineParameter(1, "Rside", cfg.RsideInit, 0.1,
+    minuit.DefineParameter(1, "Rside", cfg.RsideInit, cfg.MinuitRadiusStep,
                            cfg.RadiusMinFm, cfg.RadiusMaxFm);
-    minuit.DefineParameter(2, "Rlong", cfg.RlongInit, 0.1,
+    minuit.DefineParameter(2, "Rlong", cfg.RlongInit, cfg.MinuitRadiusStep,
                            cfg.RadiusMinFm, cfg.RadiusMaxFm);
     minuit.DefineParameter(3, "Alpha", cfg.ResonanceAlphaInit, 0.02,
                            cfg.ResonanceAlphaMin, cfg.ResonanceAlphaMax);
-    minuit.DefineParameter(4, "Norm",  state.BkgNormInit,  0.01, 0.5, 1.5);
+    const char* bkgParNames[10] = {
+        "BkgP0", "BkgOut", "BkgSide", "BkgLong",
+        "BkgOut2", "BkgSide2", "BkgLong2",
+        "BkgOutSide", "BkgOutLong", "BkgSideLong"
+    };
+    const double bkgStep[10] = {
+        0.01, 0.05, 0.05, 0.05, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2
+    };
+    for(int iPar=0; iPar<10; ++iPar){
+        const int minuitIndex = 4 + iPar;
+        const double minLimit = iPar == 0 ? 0.5 : 0.0;
+        const double maxLimit = iPar == 0 ? 1.5 : 0.0;
+        minuit.DefineParameter(minuitIndex, bkgParNames[iPar],
+                               state.BkgParInit[iPar], bkgStep[iPar],
+                               minLimit, maxLimit);
+    }
 
     if(!cfg.UseResonanceSource || cfg.FixResonanceAlpha){
         minuit.FixParameter(3);
@@ -1017,17 +1554,42 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
 
     if(cfg.UseBackground){
         if(cfg.FixBackground){
+            for(int iPar=4; iPar<14; ++iPar){
+                minuit.FixParameter(iPar);
+            }
+        }
+    }
+    else {
+        for(int iPar=5; iPar<14; ++iPar){
+            minuit.FixParameter(iPar);
+        }
+        if(cfg.FixNorm){
             minuit.FixParameter(4);
         }
     }
-    if(!cfg.UseBackground && cfg.FixNorm){
-        minuit.FixParameter(4);
-    }
 
-    arglist[0] = cfg.MinuitMaxCalls;
-    arglist[1] = 1.0;
     const auto tMinuit0 = Clock3D::now();
+    if(cfg.RunMinuitSimplexFirst){
+        arglist[0] = cfg.MinuitSimplexMaxCalls;
+        arglist[1] = cfg.MinuitTolerance;
+        std::cout << "CATS3D Minuit preconditioning: SIMPLEX calls="
+                  << cfg.MinuitSimplexMaxCalls
+                  << " tolerance=" << cfg.MinuitTolerance
+                  << " radiusStep=" << cfg.MinuitRadiusStep << "\n";
+        minuit.mnexcm("SIMPLEX", arglist, 2, ierflg);
+    }
+    arglist[0] = cfg.MinuitMaxCalls;
+    arglist[1] = cfg.MinuitTolerance;
     minuit.mnexcm("MIGRAD", arglist, 2, ierflg);
+    if(cfg.RunMinuitHesse){
+        Double_t hesseArgs[1] = {double(cfg.MinuitMaxCalls)};
+        Int_t hesseFlg = 0;
+        std::cout << "CATS3D Minuit covariance: HESSE calls="
+                  << cfg.MinuitMaxCalls << "\n";
+        minuit.mnexcm("HESSE", hesseArgs, 1, hesseFlg);
+        std::cout << "CATS3D Minuit HESSE ierflg=" << hesseFlg << "\n";
+        if(ierflg == 0) ierflg = hesseFlg;
+    }
     state.Profile.MinuitSec = SecondsSince(tMinuit0);
 
     FitCATS3DResult result;
@@ -1036,10 +1598,18 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
     minuit.GetParameter(1, result.Rside, err);
     minuit.GetParameter(2, result.Rlong, err);
     minuit.GetParameter(3, result.Alpha, err);
-    minuit.GetParameter(4, result.Norm, err);
+    for(int iPar=0; iPar<10; ++iPar){
+        minuit.GetParameter(4+iPar, result.BkgPar[iPar], err);
+    }
+    result.Norm = result.BkgPar[0];
 
-    double pars[5] = {result.Rout, result.Rside, result.Rlong,
-                      result.Alpha, result.Norm};
+    double pars[14] = {result.Rout, result.Rside, result.Rlong,
+                       result.Alpha,
+                       result.BkgPar[0], result.BkgPar[1],
+                       result.BkgPar[2], result.BkgPar[3],
+                       result.BkgPar[4], result.BkgPar[5],
+                       result.BkgPar[6], result.BkgPar[7],
+                       result.BkgPar[8], result.BkgPar[9]};
     const auto tFinalChi20 = Clock3D::now();
     result.Chi2 = ComputeChi2ForPars(pars);
     state.Profile.FinalChi2Sec = SecondsSince(tFinalChi20);
@@ -1049,13 +1619,25 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
         ++nFreePars;
     }
     if(cfg.UseBackground){
-        nFreePars += cfg.FixBackground ? 0 : 1;
+        nFreePars += cfg.FixBackground ? 0 : 10;
     }
     else {
         nFreePars += cfg.FixNorm ? 0 : 1;
     }
     result.Ndf = result.NFitBins - nFreePars;
     result.FitStatus = ierflg;
+    minuit.mnstat(result.MinuitAmin, result.MinuitEdm, result.MinuitErrDef,
+                  result.MinuitNvpar, result.MinuitNparx,
+                  result.MinuitIstat);
+    if(result.FitStatus == 0 && result.MinuitIstat == 3){
+        result.FitQuality = 1;
+    }
+    else if(result.FitStatus == 0 && result.MinuitIstat == 2){
+        result.FitQuality = 2;
+    }
+    else {
+        result.FitQuality = 3;
+    }
 
     TH3D* finalRawModel = GetCachedModelForPars(pars);
     const auto tSave0 = Clock3D::now();
@@ -1068,8 +1650,19 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
               << " Rlong=" << result.Rlong
               << " Alpha=" << result.Alpha
               << " Norm=" << result.Norm
-              << " chi2/ndf=" << result.Chi2 << "/" << result.Ndf
+              << " "
+              << ((cfg.UsePmlChi2 && state.same && state.mixed)
+                  ? "chi2_PML/ndf=" : "chi2/ndf=")
+              << result.Chi2 << "/" << result.Ndf
               << " = " << result.Chi2Ndf() << "\n"
+              << "Minuit status: ierflg=" << result.FitStatus
+              << " istat=" << result.MinuitIstat
+              << " fitQuality=" << result.FitQuality
+              << " amin=" << result.MinuitAmin
+              << " edm=" << result.MinuitEdm
+              << " errdef=" << result.MinuitErrDef
+              << " nvpar=" << result.MinuitNvpar
+              << " nparx=" << result.MinuitNparx << "\n"
               << "CATS3D builds/cache hits: " << state.nCatsEvals
               << "/" << state.nCacheHits << "\n";
     PrintFitProfile3D(state);

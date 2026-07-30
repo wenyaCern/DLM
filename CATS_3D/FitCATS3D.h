@@ -24,10 +24,20 @@ struct FitCATS3DConfig {
 
     int RebinFactor = 2;
     int MinuitMaxCalls = 80;
+    bool RunMinuitSimplexFirst = false;
+    bool RunMinuitHesse = false;
+    int MinuitSimplexMaxCalls = 2000;
+    double MinuitTolerance = 1.0;
+    double MinuitRadiusStep = 0.1;
     bool UseModelCache = true;
     bool EnableProfiling = true;
+    bool DebugQSymmetry = false;
     bool UseFastKernel = true;
     unsigned FastKernelSubdivisions = 1;
+    bool UseExternalFastKernel = false;
+    bool ExternalFastKernelByQ = true;
+    TString ExternalFastKernelFileName = "";
+    TString ExternalFastKernelTreeName = "CATS3DFastKernel6DByQ";
     unsigned MaxModelCacheEntries = 12;
     double ModelCacheToleranceFm = 0.08;
 
@@ -40,6 +50,7 @@ struct FitCATS3DConfig {
     double normQmaxMeV = 500.0;
     bool NormalizeDataInNormWindow = true;
     bool NormalizeModelInNormWindow = true;
+    bool UsePmlChi2 = true;
     bool FixNorm = true;
     bool UseBackground = true;
     bool PrefitBackground = true;
@@ -48,8 +59,8 @@ struct FitCATS3DConfig {
     double sliceCutAbs = 0.06;
 
     unsigned NumGridBins = 21;
-    double gridMinFm = -20.0;
-    double gridMaxFm = 20.0;
+    double gridMinFm = -50.0;
+    double gridMaxFm = 50.0;
 
     TString ResonancePRFileName = "./EPOS_data/resonance_PR.root";
     TString ResonancePRTreeName = "EPOS_PrimReson_LCMS";
@@ -73,13 +84,14 @@ struct FitCATS3DConfig {
     double ResonanceAlphaMax = 1.6;
     unsigned ResonanceAlphaBins = 9;
     bool FixResonanceAlpha = false;
+    bool ResonanceUseEllipsoidalCore = true;
     bool ResonanceDebug = false;
 
-    double RoutInit = 5.0;
-    double RsideInit = 5.0;
-    double RlongInit = 5.0;
-    double RadiusMinFm = 0.2;
-    double RadiusMaxFm = 30.0;
+    double RoutInit = 9.0;
+    double RsideInit = 9.0;
+    double RlongInit = 9.0;
+    double RadiusMinFm = 1.0;
+    double RadiusMaxFm = 16.0;
     double NormInit = 1.0;
 };
 
@@ -93,6 +105,15 @@ struct FitCATS3DResult {
     int Ndf = 0;
     int NFitBins = 0;
     int FitStatus = -1;
+    int MinuitIstat = -1;
+    int FitQuality = 3;
+    double MinuitAmin = 0.0;
+    double MinuitEdm = 0.0;
+    double MinuitErrDef = 1.0;
+    int MinuitNvpar = 0;
+    int MinuitNparx = 0;
+    double BkgPar[10] = {1.0, 0.0, 0.0, 0.0, 0.0,
+                         0.0, 0.0, 0.0, 0.0, 0.0};
 
     double Chi2Ndf() const { return Ndf > 0 ? Chi2 / double(Ndf) : 0.0; }
 };

@@ -793,6 +793,11 @@ struct ResoPair3D {
 
 class DLM_CleverReso3D : public CatsSource {
 public:
+    enum CoreMode3D {
+        cmSeparableStable = 0,
+        cmEllipsoidalLevy = 1
+    };
+
     DLM_CleverReso3D();
     ~DLM_CleverReso3D();
 
@@ -858,6 +863,8 @@ public:
 
     void SetUseLCMS(const bool& val);
     void SetUseModelCore(const bool& val);
+    void SetCoreMode(const CoreMode3D& mode);
+    void SetCoreMode(const int& mode);
     void SetDebugMode(const bool& val);
 
     unsigned GetNumPars() override;
@@ -872,6 +879,11 @@ private:
                                 const double& scaleLong,
                                 const double& stability,
                                 DLM_Random& ranGen) const;
+    TVector3 SampleEllipsoidalLevyCoreVector3D(const double& scaleOut,
+                                               const double& scaleSide,
+                                               const double& scaleLong,
+                                               const double& stability,
+                                               DLM_Random& ranGen) const;
     TVector3 BuildRstarFromPair(const ResoPair3D& pair,
                                 const TVector3& rCoreSourceLCMS,
                                 DLM_Random& ranGen) const;
@@ -922,6 +934,7 @@ private:
 
 private:
     int Type;
+    CoreMode3D CoreMode;
     unsigned NumPtsStability;
     unsigned NumPtsScale;
     unsigned NumPtsRad;

@@ -3265,6 +3265,7 @@ void DLM_CleverMcLevyResoTM_3DTo1D::Init(){
 // Added new member of source class, resonance contribution, 3D
 DLM_CleverReso3D::DLM_CleverReso3D()
 : Type(1)
+, CoreMode(cmSeparableStable)
 , NumPtsStability(64)
 , NumPtsScale(128)
 , NumPtsRad(81)
@@ -3507,6 +3508,21 @@ void DLM_CleverReso3D::SetUseModelCore(const bool& val){
     ClearSourceCache();
 }
 
+void DLM_CleverReso3D::SetCoreMode(const CoreMode3D& mode){
+    if(CoreMode==mode) return;
+    CoreMode = mode;
+    ClearSourceCache();
+}
+
+void DLM_CleverReso3D::SetCoreMode(const int& mode){
+    if(mode==int(cmEllipsoidalLevy)){
+        SetCoreMode(cmEllipsoidalLevy);
+    }
+    else{
+        SetCoreMode(cmSeparableStable);
+    }
+}
+
 void DLM_CleverReso3D::SetDebugMode(const bool& val){
     DebugMode = val;
 }
@@ -3584,6 +3600,7 @@ DLM_Histo<double>* DLM_CleverReso3D::BuildSourceHisto3D(const double& scaleOut,
     DLM_Random RanGen(11);
     const double DiffVal = 1./double(NumMcIter);
     unsigned WhichBin[3];
+    unsigned AcceptedIter = 0;
 
     for(unsigned uIter=0; uIter<NumMcIter; uIter++){
         TVector3 rCoreSouLCMS =
@@ -3626,7 +3643,38 @@ DLM_Histo<double>* DLM_CleverReso3D::BuildSourceHisto3D(const double& scaleOut,
         if(BinVolume<=0.) continue;
         const unsigned TotBin = sourceHisto->GetTotBin(WhichBin);
         sourceHisto->Add(TotBin,DiffVal/BinVolume);
+        AcceptedIter++;
     }
+
+    double RawIntegral = 0.;
+    for(unsigned uOut=0; uOut<sourceHisto->GetNbins(0); uOut++){
+        for(unsigned uSide=0; uSide<sourceHisto->GetNbins(1); uSide++){
+            for(unsigned uLong=0; uLong<sourceHisto->GetNbins(2); uLong++){
+                WhichBin[0] = uOut;
+                WhichBin[1] = uSide;
+                WhichBin[2] = uLong;
+                const double BinVolume =
+                    sourceHisto->GetBinSize(0,uOut) *
+                    sourceHisto->GetBinSize(1,uSide) *
+                    sourceHisto->GetBinSize(2,uLong);
+                if(BinVolume<=0.) continue;
+                RawIntegral += sourceHisto->GetBinContent(WhichBin)*BinVolume;
+            }
+        }
+    }
+
+    if(RawIntegral>0.){
+        sourceHisto->Scale(1./RawIntegral);
+    }
+
+    std::cout << "DLM_CleverReso3D source build: R=("
+              << scaleOut << ", " << scaleSide << ", " << scaleLong
+              << ") alpha=" << stability
+              << " accepted=" << AcceptedIter << "/" << NumMcIter
+              << " (" << (NumMcIter ? double(AcceptedIter)/double(NumMcIter) : 0.) << ")"
+              << " rawIntegral=" << RawIntegral
+              << " normalized=" << (RawIntegral>0. ? "yes" : "no")
+              << "\n";
 
     return sourceHisto;
 }
@@ -3711,6 +3759,11 @@ TVector3 DLM_CleverReso3D::SampleCoreVector3D(const double& scaleOut,
                                               const double& scaleLong,
                                               const double& stability,
                                               DLM_Random& ranGen) const {
+    if(CoreMode==cmEllipsoidalLevy){
+        return SampleEllipsoidalLevyCoreVector3D(
+            scaleOut, scaleSide, scaleLong, stability, ranGen);
+    }
+
     auto sampleStable = [&ranGen, &stability](const double& scale) {
         if(stability==2.) return ranGen.Gauss(0.,scale);
         return ranGen.Stable(stability,0.,scale,0.);
@@ -3732,6 +3785,33 @@ TVector3 DLM_CleverReso3D::SampleCoreVector3D(const double& scaleOut,
     return TVector3(sampleDiffStable(scaleOut),
                     sampleDiffStable(scaleSide),
                     sampleDiffStable(scaleLong));
+}
+
+TVector3 DLM_CleverReso3D::SampleEllipsoidalLevyCoreVector3D(
+    const double& scaleOut,
+    const double& scaleSide,
+    const double& scaleLong,
+    const double& stability,
+    DLM_Random& ranGen) const {
+
+    const double alpha = stability>0. ? stability : 2.;
+    const double shape = 3.0/alpha;
+    const double t = ranGen.Gamma(shape, 1.0);
+
+    // S(r) is sampled as exp[-(rho/coreScale)^alpha], where
+    // rho^2 = (r_out/Rout)^2 + (r_side/Rside)^2 + (r_long/Rlong)^2.
+    // coreScale=sqrt(2) reproduces a single Gaussian at alpha=2, while
+    // coreScale=2 reproduces the current diff-Gaussian pair width convention.
+    const double coreScale = Type==0 ? std::sqrt(2.0) : 2.0;
+    const double rho = coreScale*std::pow(t, 1.0/alpha);
+
+    const double cosTheta = ranGen.Uniform(-1.0, 1.0);
+    const double sinTheta = std::sqrt(std::max(0.0, 1.0-cosTheta*cosTheta));
+    const double phi = ranGen.Uniform(0.0, 2.0*std::acos(-1.0));
+
+    return TVector3(scaleOut*rho*sinTheta*std::cos(phi),
+                    scaleSide*rho*sinTheta*std::sin(phi),
+                    scaleLong*rho*cosTheta);
 }
 
 TVector3 DLM_CleverReso3D::PropagationShiftInLCMS(const ResoParticle3D& part,

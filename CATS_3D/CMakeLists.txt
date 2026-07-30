@@ -48,12 +48,14 @@ endfunction()
 
 add_library(FitCATS3D SHARED
   Basics3D.cpp
+  CATS3DFastKernelCache.cpp
   FitCATS3D.cpp
 )
 configure_cats3d_target(FitCATS3D)
 
 add_library(FitCATS3DResonance SHARED
   Basics3D.cpp
+  CATS3DFastKernelCache.cpp
   FitCATS3D.cpp
   CATS3DResonanceSourceBuilder.cpp
 )
@@ -88,3 +90,27 @@ add_executable(r20_check_CATS3D
 )
 configure_cats3d_target(r20_check_CATS3D)
 target_link_libraries(r20_check_CATS3D PRIVATE FitCATS3D)
+
+add_executable(kernel_cache_check_CATS3D
+  kernel_cache_check_CATS3D_main.cpp
+)
+configure_cats3d_target(kernel_cache_check_CATS3D)
+target_link_libraries(kernel_cache_check_CATS3D PRIVATE FitCATS3D)
+
+add_executable(build_data_kernel_CATS3D
+  build_data_kernel_CATS3D_main.cpp
+)
+configure_cats3d_target(build_data_kernel_CATS3D)
+target_link_libraries(build_data_kernel_CATS3D PRIVATE FitCATS3D)
+
+add_executable(convolve_kernel_gauss_CATS3D
+  convolve_kernel_gauss_CATS3D_main.cpp
+)
+configure_cats3d_target(convolve_kernel_gauss_CATS3D)
+target_link_libraries(convolve_kernel_gauss_CATS3D PRIVATE FitCATS3D)
+
+add_executable(scan_radius_external_kernel_CATS3D
+  scan_radius_external_kernel_CATS3D_main.cpp
+)
+configure_cats3d_target(scan_radius_external_kernel_CATS3D)
+target_link_libraries(scan_radius_external_kernel_CATS3D PRIVATE FitCATS3D)

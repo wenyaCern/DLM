@@ -2,6 +2,15 @@
 !./install/bin/cats-config
 !./install/bin/thiscats
 
+CATS_3D/build/*
+CATS_3D/*.d
+CATS_3D/fit_CATS3D*.root
+CATS_3D/OutputFiles/dataKernel_*.root
+CATS_3D/OutputFiles/kernel_cache*.root
+CATS_3D/OutputFiles/convolved_*.root
+CATS_3D/OutputFiles/radius_scan_externalKernel.root
+CATS_3D/OutputFiles/pure_CATS_*.root
+
 CATS_TUTORIAL_2019/CMake/*
 !CATS_TUTORIAL_2019/CMake/CMakeLists.txt
 !CATS_TUTORIAL_2019/CMake/COMPILE_AND_RUN.sh
