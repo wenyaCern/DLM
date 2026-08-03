@@ -1,3 +1,6 @@
+#ifndef PION_PBPB_EXTENDED_CK_H
+#define PION_PBPB_EXTENDED_CK_H
+
 #include "TString.h"
 
 class DLM_Ck;
@@ -10,63 +13,42 @@ void Init_pipi_Theory(TString SourceType,
                       const bool WithCoulomb,
                       const bool onlyTheory,
                       const double SourceSize,
-                      const double SourceShapeOrAlpha=1.5,
+                      const double SourceAlpha=2.0,
                       const unsigned NumMomBins=500,
                       const double kMin=0,
                       const double kMax=400,
-                      TString lambdaFileName="../Files/kStarDepLambda_pion_PbPb.root",
-                      TString lambdaHistName="hLambdaKstar_mT0.30to0.50_cent0to10");
-void fitData(bool Identical=true, bool WithCoulomb=true);
-void fitDataGaussOnly(bool Identical=true, bool WithCoulomb=true);
+                      TString lambdaFileName="../Files/lam/kStarDepLambda_cent0to10_pion_PbPb.root",
+                      TString lambdaHistName="hPurityKstar_mT0.40to0.50_cent0to10");
+
 void fitDataCoreReso(bool Identical=true,
                      bool WithCoulomb=true,
-                     double alphaInit=1.5,
-                     bool fixAlpha=false);
+                     double alphaInit=2.0,
+                     bool fixAlpha=true);
+
+void fitDataCoreResoFixedAlpha(bool Identical=true,
+                               bool WithCoulomb=true,
+                               double alpha=2.0);
+
+void fitDataCoreResoFreeAlpha(bool Identical=true,
+                              bool WithCoulomb=true,
+                              double alphaInit=1.5);
+
+// Compatibility aliases kept for old main macros. They now use only
+// DLM_CleverMcLevyResoTM; other source families were moved to backup.
+void fitData(bool Identical=true, bool WithCoulomb=true);
+void fitDataGaussOnly(bool Identical=true, bool WithCoulomb=true);
 void fitData3DTo1D(bool Identical=true,
                    bool WithCoulomb=true,
                    bool usePRF3DShift=false);
-void RunCorrectLambdaCent0To10Mt2To7(bool Identical=true,
-                                     bool WithCoulomb=true);
-void RunCorrectLambdaCent10To30Mt2To7(bool Identical=true,
-                                      bool WithCoulomb=true);
-void RunCorrectLambdaCent30To50Mt2To7(bool Identical=true,
-                                      bool WithCoulomb=true);
-void ScanAlphaBinning(bool Identical=true,
-                      bool WithCoulomb=true,
-                      double alphaMin=1.0,
-                      double alphaMax=2.0,
-                      double alphaStep=0.2,
-                      double fitMin=2.0,
-                      double fitMax=200.0,
-                      double baselineFitMin=200.0,
-                      double baselineFitMax=400.0,
-                      unsigned catsMomBins=500);
-void ScanAlpha8MeV(bool Identical=true,
-                   bool WithCoulomb=true,
-                   double alphaMin=1.0,
-                   double alphaMax=2.0,
-                   double alphaStep=0.2,
-                   double fitMin=2.0,
-                   double fitMax=200.0,
-                   double baselineFitMin=200.0,
-                   double baselineFitMax=400.0,
-                   unsigned catsMomBins=500);
-void ScanWeakDecay8MeV(bool Identical=true,
-                       bool WithCoulomb=true,
-                       double fixedAlpha=1.5,
-                       double weakMin=0.12,
-                       double weakMax=0.18,
-                       double weakStep=0.02,
-                       double fitMin=2.0,
-                       double fitMax=200.0,
-                       double baselineFitMin=200.0,
-                       double baselineFitMax=400.0,
-                       unsigned catsMomBins=500);
 
 void Ck_pL_Ledni_Usmani();
-//save in a file the correlation function from DLM_Ck
-void RootFile_DlmCk(const TString& RootFileName, const TString& GraphName, DLM_Ck* CkToPlot);
-//save in a file the correlation function from DLM_CkDecomposition
-void RootFile_DlmCk(const TString& RootFileName, const TString& GraphName, DLM_CkDecomposition* CkToPlot, bool PlotIndividualContributions=false);
-
+void RootFile_DlmCk(const TString& RootFileName,
+                    const TString& GraphName,
+                    DLM_Ck* CkToPlot);
+void RootFile_DlmCk(const TString& RootFileName,
+                    const TString& GraphName,
+                    DLM_CkDecomposition* CkToPlot,
+                    bool PlotIndividualContributions=false);
 void Ck_pp_Decomposition(const TString& SourceType);
+
+#endif

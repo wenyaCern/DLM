@@ -32,6 +32,10 @@ add_executable(${PROJECT_NAME}
   ${PROJECT_DESTINATION}/ExtendedCk.cpp
 )
 
+add_executable(compare_fixedR9_gauss_reso
+  ${PROJECT_DESTINATION}/compare_fixedR9_gauss_reso_main.cpp
+)
+
 # ================= ROOT ================= #
 find_program(ROOT_CONFIG_EXECUTABLE root-config HINTS
   "${ROOT_PATH}/bin"
@@ -81,7 +85,20 @@ target_link_directories(${PROJECT_NAME} PRIVATE
   ${OMP_LIB}
 )
 
+target_link_directories(compare_fixedR9_gauss_reso PRIVATE
+  ${CATS_LIBDIR}
+  ${GSL_LIB}
+  ${OMP_LIB}
+)
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
+  CATS
+  ${ROOT_LIBS}
+  gsl gslcblas
+  omp
+)
+
+target_link_libraries(compare_fixedR9_gauss_reso PRIVATE
   CATS
   ${ROOT_LIBS}
   gsl gslcblas

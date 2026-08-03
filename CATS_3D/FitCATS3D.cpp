@@ -81,6 +81,8 @@ struct FitState3D {
     double BkgNormInit = 1.0;
     double BkgParInit[10] = {1.0, 0.0, 0.0, 0.0, 0.0,
                              0.0, 0.0, 0.0, 0.0, 0.0};
+    double BkgParErrInit[10] = {0.0, 0.0, 0.0, 0.0, 0.0,
+                                0.0, 0.0, 0.0, 0.0, 0.0};
     double DataNormFactor = 1.0;
 };
 
@@ -594,6 +596,7 @@ void PrefitBackground3D(FitState3D& state)
     const int fitStatus = data->Fit(&baseline, "RQ0");
     for(int iPar=0; iPar<10; ++iPar){
         state.BkgParInit[iPar] = baseline.GetParameter(iPar);
+        state.BkgParErrInit[iPar] = baseline.GetParError(iPar);
     }
     state.BkgNormInit = state.BkgParInit[0];
 
@@ -1205,6 +1208,253 @@ TH3D* BuildFeedDownMap3D(const TH3D& data)
     return feedDownMap;
 }
 
+void ApplyBestFitBackground3D(const FitCATS3DConfig& cfg,
+                              const FitCATS3DResult& result,
+                              TH3D* model)
+{
+    if(!model) return;
+
+    const double pars[14] = {result.Rout, result.Rside, result.Rlong,
+                             result.Alpha,
+                             result.BkgPar[0], result.BkgPar[1],
+                             result.BkgPar[2], result.BkgPar[3],
+                             result.BkgPar[4], result.BkgPar[5],
+                             result.BkgPar[6], result.BkgPar[7],
+                             result.BkgPar[8], result.BkgPar[9]};
+
+    for(int ix=1; ix<=model->GetNbinsX(); ++ix){
+        for(int iy=1; iy<=model->GetNbinsY(); ++iy){
+            for(int iz=1; iz<=model->GetNbinsZ(); ++iz){
+                double bkg = result.Norm;
+                if(cfg.UseBackground){
+                    bkg = Background3DValue(*model, ix, iy, iz, pars);
+                }
+                model->SetBinContent(ix, iy, iz,
+                                     model->GetBinContent(ix, iy, iz) * bkg);
+                model->SetBinError(ix, iy, iz,
+                                   model->GetBinError(ix, iy, iz) * std::fabs(bkg));
+            }
+        }
+    }
+}
+
+std::unique_ptr<TH3D> BuildFinalModelForSourcePars3D(const FitCATS3DConfig& cfg,
+                                                     const FitCATS3DResult& result,
+                                                     const double Rout,
+                                                     const double Rside,
+                                                     const double Rlong,
+                                                     const double Alpha,
+                                                     const TString& name)
+{
+    double pars[14] = {Rout, Rside, Rlong, Alpha,
+                       result.BkgPar[0], result.BkgPar[1],
+                       result.BkgPar[2], result.BkgPar[3],
+                       result.BkgPar[4], result.BkgPar[5],
+                       result.BkgPar[6], result.BkgPar[7],
+                       result.BkgPar[8], result.BkgPar[9]};
+
+    TH3D* raw = GetCachedModelForPars(pars);
+    if(!raw) return nullptr;
+
+    std::unique_ptr<TH3D> model(dynamic_cast<TH3D*>(raw->Clone(name)));
+    model->SetDirectory(nullptr);
+    ApplyBestFitBackground3D(cfg, result, model.get());
+    return model;
+}
+
+void UpdateEnvelope1D(TH1D* hLow, TH1D* hHigh, const TH1D* h)
+{
+    if(!hLow || !hHigh || !h) return;
+
+    for(int iBin=1; iBin<=h->GetNbinsX(); ++iBin){
+        const double value = h->GetBinContent(iBin);
+        if(value < hLow->GetBinContent(iBin)){
+            hLow->SetBinContent(iBin, value);
+        }
+        if(value > hHigh->GetBinContent(iBin)){
+            hHigh->SetBinContent(iBin, value);
+        }
+    }
+}
+
+std::unique_ptr<TH1D> ProjectBandModel1D(TH3D* model,
+                                         TH3D* mixedWeight,
+                                         const TString& target,
+                                         const TString& name,
+                                         const double sliceCutAbs)
+{
+    if(mixedWeight){
+        return std::unique_ptr<TH1D>(ProjectMixedWeightedSlice1D(
+            model, mixedWeight, target, name, sliceCutAbs));
+    }
+    return std::unique_ptr<TH1D>(ProjectFemtoSlice1D(
+        model, target, name, sliceCutAbs));
+}
+
+void WriteOneSigmaSliceBands3D(const FitCATS3DConfig& cfg,
+                               const FitCATS3DResult& result,
+                               TH3D* mixedWeight)
+{
+    const double errOut = std::fabs(result.RoutErr);
+    const double errSide = std::fabs(result.RsideErr);
+    const double errLong = std::fabs(result.RlongErr);
+    const double errAlpha =
+        (cfg.UseResonanceSource && !cfg.FixResonanceAlpha)
+            ? std::fabs(result.AlphaErr) : 0.0;
+
+    if(errOut<=0.0 && errSide<=0.0 && errLong<=0.0 && errAlpha<=0.0){
+        std::cout << "CATS3D 1-sigma source band skipped: parameter errors are zero.\n";
+        return;
+    }
+
+    const TString targets[3] = {"out", "side", "long"};
+    const TString prefix = mixedWeight
+        ? "hCATS3D_best_1sigma_mixedWeighted_proj_"
+        : "hCATS3D_best_1sigma_proj_";
+
+    std::unique_ptr<TH1D> hLow[3];
+    std::unique_ptr<TH1D> hHigh[3];
+
+    int nModels = 0;
+    const int nAlphaSigns = errAlpha > 0.0 ? 2 : 1;
+    for(int sOut=-1; sOut<=1; sOut+=2){
+        for(int sSide=-1; sSide<=1; sSide+=2){
+            for(int sLong=-1; sLong<=1; sLong+=2){
+                for(int iAlphaSign=0; iAlphaSign<nAlphaSigns; ++iAlphaSign){
+                    const double alphaSign = nAlphaSigns == 2
+                        ? (iAlphaSign == 0 ? -1.0 : 1.0) : 0.0;
+                    const double Rout = result.Rout + double(sOut) * errOut;
+                    const double Rside = result.Rside + double(sSide) * errSide;
+                    const double Rlong = result.Rlong + double(sLong) * errLong;
+                    const double Alpha = result.Alpha + alphaSign * errAlpha;
+
+                    std::unique_ptr<TH3D> model(BuildFinalModelForSourcePars3D(
+                        cfg, result, Rout, Rside, Rlong, Alpha,
+                        Form("hCATS3D_1sigma_model_%d", nModels)));
+                    if(!model) continue;
+                    ++nModels;
+
+                    for(int iTarget=0; iTarget<3; ++iTarget){
+                        std::unique_ptr<TH1D> hProj(ProjectBandModel1D(
+                            model.get(), mixedWeight, targets[iTarget],
+                            Form("%s%s_tmp_%d", prefix.Data(),
+                                 targets[iTarget].Data(), nModels),
+                            cfg.sliceCutAbs));
+                        if(!hProj) continue;
+
+                        if(!hLow[iTarget]){
+                            hLow[iTarget].reset(dynamic_cast<TH1D*>(hProj->Clone(
+                                prefix + targets[iTarget] + "_low")));
+                            hHigh[iTarget].reset(dynamic_cast<TH1D*>(hProj->Clone(
+                                prefix + targets[iTarget] + "_high")));
+                            hLow[iTarget]->SetDirectory(nullptr);
+                            hHigh[iTarget]->SetDirectory(nullptr);
+                        }
+                        else {
+                            UpdateEnvelope1D(hLow[iTarget].get(),
+                                             hHigh[iTarget].get(),
+                                             hProj.get());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for(int iTarget=0; iTarget<3; ++iTarget){
+        if(hLow[iTarget]) hLow[iTarget]->Write("", TObject::kOverwrite);
+        if(hHigh[iTarget]) hHigh[iTarget]->Write("", TObject::kOverwrite);
+    }
+
+    std::cout << "CATS3D wrote 1-sigma source-error slice bands"
+              << " using " << nModels << " source-parameter corner models"
+              << (mixedWeight ? " with mixed-weighted projection." : ".")
+              << "\n";
+}
+
+double Background3DErrorDiag(const double qOut,
+                             const double qSide,
+                             const double qLong,
+                             const double* parErr)
+{
+    const double basis[10] = {
+        1.0, qOut, qSide, qLong,
+        qOut*qOut, qSide*qSide, qLong*qLong,
+        qOut*qSide, qOut*qLong, qSide*qLong
+    };
+
+    double variance = 0.0;
+    for(int iPar=0; iPar<10; ++iPar){
+        const double term = basis[iPar] * parErr[iPar];
+        variance += term * term;
+    }
+    return std::sqrt(std::max(0.0, variance));
+}
+
+void WriteBackgroundOneSigmaBands3D(const FitCATS3DConfig& cfg,
+                                    const FitCATS3DResult& result,
+                                    const TH3D& reference,
+                                    TH3D* mixedWeight)
+{
+    bool hasError = false;
+    for(int iPar=0; iPar<10; ++iPar){
+        if(std::fabs(result.BkgParErr[iPar]) > 0.0){
+            hasError = true;
+            break;
+        }
+    }
+    if(!hasError){
+        std::cout << "CATS3D background 1-sigma band skipped: bkg parameter errors are zero.\n";
+        return;
+    }
+
+    std::unique_ptr<TH3D> hLow(dynamic_cast<TH3D*>(
+        reference.Clone("hCATS3D_background_1sigma_low")));
+    std::unique_ptr<TH3D> hHigh(dynamic_cast<TH3D*>(
+        reference.Clone("hCATS3D_background_1sigma_high")));
+    hLow->SetDirectory(nullptr);
+    hHigh->SetDirectory(nullptr);
+    hLow->Reset("ICES");
+    hHigh->Reset("ICES");
+
+    for(int ix=1; ix<=reference.GetNbinsX(); ++ix){
+        for(int iy=1; iy<=reference.GetNbinsY(); ++iy){
+            for(int iz=1; iz<=reference.GetNbinsZ(); ++iz){
+                const double qOut = reference.GetXaxis()->GetBinCenter(ix);
+                const double qSide = reference.GetYaxis()->GetBinCenter(iy);
+                const double qLong = reference.GetZaxis()->GetBinCenter(iz);
+                const double bkg = Background3DValue(qOut, qSide, qLong,
+                                                     result.BkgPar);
+                const double sigma = Background3DErrorDiag(qOut, qSide, qLong,
+                                                           result.BkgParErr);
+                hLow->SetBinContent(ix, iy, iz, bkg - sigma);
+                hHigh->SetBinContent(ix, iy, iz, bkg + sigma);
+            }
+        }
+    }
+
+    hLow->Write("", TObject::kOverwrite);
+    hHigh->Write("", TObject::kOverwrite);
+    WriteFemtoSliceProjections(hLow.get(), "hCATS3D_background_1sigma_low",
+                               cfg.sliceCutAbs);
+    WriteFemtoSliceProjections(hHigh.get(), "hCATS3D_background_1sigma_high",
+                               cfg.sliceCutAbs);
+
+    if(mixedWeight){
+        WriteMixedWeightedFemtoSliceProjections(
+            hLow.get(), mixedWeight,
+            "hCATS3D_background_1sigma_low", cfg.sliceCutAbs);
+        WriteMixedWeightedFemtoSliceProjections(
+            hHigh.get(), mixedWeight,
+            "hCATS3D_background_1sigma_high", cfg.sliceCutAbs);
+    }
+
+    std::cout << "CATS3D wrote background 1-sigma bands"
+              << " using diagonal prefit-parameter errors"
+              << (mixedWeight ? " with mixed-weighted projections." : ".")
+              << "\n";
+}
+
 void SaveFitOutput(const FitCATS3DConfig& cfg,
                    const FitCATS3DResult& result,
                    TH3D* data,
@@ -1240,13 +1490,10 @@ void SaveFitOutput(const FitCATS3DConfig& cfg,
                     bkg = Background3DValue(*model, ix, iy, iz, pars);
                 }
                 background->SetBinContent(ix, iy, iz, bkg);
-                model->SetBinContent(ix, iy, iz,
-                                     model->GetBinContent(ix, iy, iz) * bkg);
-                model->SetBinError(ix, iy, iz,
-                                   model->GetBinError(ix, iy, iz) * std::fabs(bkg));
             }
         }
     }
+    ApplyBestFitBackground3D(cfg, result, model.get());
 
     std::unique_ptr<TH3D> ratio(dynamic_cast<TH3D*>(data->Clone("hDataOverCATS3D")));
     ratio->SetDirectory(nullptr);
@@ -1264,6 +1511,7 @@ void SaveFitOutput(const FitCATS3DConfig& cfg,
     }
 
     TFile fout(cfg.OutputFileName, "RECREATE");
+    fout.cd();
     data->Write("hDataCk3D");
     if(gFitState3D && gFitState3D->same && gFitState3D->mixed){
         gFitState3D->same->Write("hSame3D_forPML", TObject::kOverwrite);
@@ -1311,27 +1559,45 @@ void SaveFitOutput(const FitCATS3DConfig& cfg,
     WriteFemtoSliceProjections(ratio.get(), "hDataOverCATS3D", cfg.sliceCutAbs);
 
     std::unique_ptr<TH3D> mixedWeight(LoadMixedWeightForProjection(cfg));
+    fout.cd();
     if(mixedWeight){
         mixedWeight->Write("hMixed3D_projectionWeight", TObject::kOverwrite);
         WriteMixedWeightedFemtoSliceProjections(data, mixedWeight.get(),
                                                 "hDataCk3D", cfg.sliceCutAbs);
         WriteMixedWeightedFemtoSliceProjections(modelShape.get(), mixedWeight.get(),
                                                 "hCATS3D_shape", cfg.sliceCutAbs);
+        WriteMixedWeightedFemtoSliceProjections(background.get(), mixedWeight.get(),
+                                                "hCATS3D_background", cfg.sliceCutAbs);
         WriteMixedWeightedFemtoSliceProjections(model.get(), mixedWeight.get(),
                                                 "hCATS3D_best", cfg.sliceCutAbs);
+        WriteOneSigmaSliceBands3D(cfg, result, mixedWeight.get());
+        WriteBackgroundOneSigmaBands3D(cfg, result, *background,
+                                       mixedWeight.get());
         std::cout << "CATS3D wrote mixed-weighted slice projections for data/model.\n";
+    }
+    else {
+        WriteOneSigmaSliceBands3D(cfg, result, nullptr);
+        WriteBackgroundOneSigmaBands3D(cfg, result, *background, nullptr);
     }
 
     TNtuple summary("fit_summary", "fit_summary",
-                    "Rout:Rside:Rlong:Alpha:Norm:Chi2:Ndf:Chi2Ndf:NFitBins:"
+                    "Rout:Rside:Rlong:Alpha:"
+                    "RoutErr:RsideErr:RlongErr:AlphaErr:"
+                    "Norm:Chi2:Ndf:Chi2Ndf:NFitBins:"
                     "FitStatus:MinuitIstat:FitQuality:MinuitAmin:MinuitEdm:"
                     "MinuitErrDef:MinuitNvpar:MinuitNparx:"
                     "BkgP0:BkgOut:BkgSide:BkgLong:"
                     "BkgOut2:BkgSide2:BkgLong2:"
-                    "BkgOutSide:BkgOutLong:BkgSideLong");
-    Float_t summaryValues[27] = {
+                    "BkgOutSide:BkgOutLong:BkgSideLong:"
+                    "BkgP0Err:BkgOutErr:BkgSideErr:BkgLongErr:"
+                    "BkgOut2Err:BkgSide2Err:BkgLong2Err:"
+                    "BkgOutSideErr:BkgOutLongErr:BkgSideLongErr");
+    Float_t summaryValues[41] = {
         float(result.Rout), float(result.Rside), float(result.Rlong),
-        float(result.Alpha), float(result.Norm), float(result.Chi2),
+        float(result.Alpha),
+        float(result.RoutErr), float(result.RsideErr),
+        float(result.RlongErr), float(result.AlphaErr),
+        float(result.Norm), float(result.Chi2),
         float(result.Ndf), float(result.Chi2Ndf()), float(result.NFitBins),
         float(result.FitStatus), float(result.MinuitIstat),
         float(result.FitQuality), float(result.MinuitAmin),
@@ -1341,7 +1607,12 @@ void SaveFitOutput(const FitCATS3DConfig& cfg,
         float(result.BkgPar[2]), float(result.BkgPar[3]),
         float(result.BkgPar[4]), float(result.BkgPar[5]),
         float(result.BkgPar[6]), float(result.BkgPar[7]),
-        float(result.BkgPar[8]), float(result.BkgPar[9])
+        float(result.BkgPar[8]), float(result.BkgPar[9]),
+        float(result.BkgParErr[0]), float(result.BkgParErr[1]),
+        float(result.BkgParErr[2]), float(result.BkgParErr[3]),
+        float(result.BkgParErr[4]), float(result.BkgParErr[5]),
+        float(result.BkgParErr[6]), float(result.BkgParErr[7]),
+        float(result.BkgParErr[8]), float(result.BkgParErr[9])
     };
     summary.Fill(summaryValues);
     summary.Write();
@@ -1595,11 +1866,16 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
     FitCATS3DResult result;
     double err = 0.0;
     minuit.GetParameter(0, result.Rout, err);
+    result.RoutErr = err;
     minuit.GetParameter(1, result.Rside, err);
+    result.RsideErr = err;
     minuit.GetParameter(2, result.Rlong, err);
+    result.RlongErr = err;
     minuit.GetParameter(3, result.Alpha, err);
+    result.AlphaErr = err;
     for(int iPar=0; iPar<10; ++iPar){
         minuit.GetParameter(4+iPar, result.BkgPar[iPar], err);
+        result.BkgParErr[iPar] = state.BkgParErrInit[iPar];
     }
     result.Norm = result.BkgPar[0];
 
@@ -1665,6 +1941,39 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
               << " nparx=" << result.MinuitNparx << "\n"
               << "CATS3D builds/cache hits: " << state.nCatsEvals
               << "/" << state.nCacheHits << "\n";
+    std::cout << "CATS3D source parameter errors\n"
+              << "  Rout  = " << result.Rout
+              << " +/- " << result.RoutErr << "\n"
+              << "  Rside = " << result.Rside
+              << " +/- " << result.RsideErr << "\n"
+              << "  Rlong = " << result.Rlong
+              << " +/- " << result.RlongErr << "\n"
+              << "  Alpha = " << result.Alpha
+              << " +/- " << result.AlphaErr
+              << ((cfg.UseResonanceSource && !cfg.FixResonanceAlpha)
+                  ? "" : " (fixed)")
+              << "\n";
+    std::cout << "CATS3D background prefit parameter errors\n"
+              << "  BkgP0       = " << result.BkgPar[0]
+              << " +/- " << result.BkgParErr[0] << "\n"
+              << "  BkgOut      = " << result.BkgPar[1]
+              << " +/- " << result.BkgParErr[1] << "\n"
+              << "  BkgSide     = " << result.BkgPar[2]
+              << " +/- " << result.BkgParErr[2] << "\n"
+              << "  BkgLong     = " << result.BkgPar[3]
+              << " +/- " << result.BkgParErr[3] << "\n"
+              << "  BkgOut2     = " << result.BkgPar[4]
+              << " +/- " << result.BkgParErr[4] << "\n"
+              << "  BkgSide2    = " << result.BkgPar[5]
+              << " +/- " << result.BkgParErr[5] << "\n"
+              << "  BkgLong2    = " << result.BkgPar[6]
+              << " +/- " << result.BkgParErr[6] << "\n"
+              << "  BkgOutSide  = " << result.BkgPar[7]
+              << " +/- " << result.BkgParErr[7] << "\n"
+              << "  BkgOutLong  = " << result.BkgPar[8]
+              << " +/- " << result.BkgParErr[8] << "\n"
+              << "  BkgSideLong = " << result.BkgPar[9]
+              << " +/- " << result.BkgParErr[9] << "\n";
     PrintFitProfile3D(state);
 
     return result;

@@ -17,8 +17,9 @@ int main(int argc, char *argv[]){
     printf(" To find a bug: continue with this tutorial\n");
     printf("-------------------------------------------\n");
 
-    // RunCorrectLambdaCent30To50Mt2To7(true, true);
-    fitDataCoreReso(true, true, 2.0, true);
-    // fitData(true, true);
+    fitDataGaussOnly(true, true);
+    fitDataCoreResoFixedAlpha(true, true, 2.0);
+    fitDataCoreResoFixedAlpha(true, true, 1.6);
+    // fitDataCoreResoFreeAlpha(true, true, 1.5);
     return 0;
 }

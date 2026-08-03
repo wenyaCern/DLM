@@ -100,6 +100,10 @@ struct FitCATS3DResult {
     double Rside = 0.0;
     double Rlong = 0.0;
     double Alpha = 2.0;
+    double RoutErr = 0.0;
+    double RsideErr = 0.0;
+    double RlongErr = 0.0;
+    double AlphaErr = 0.0;
     double Norm = 1.0;
     double Chi2 = 0.0;
     int Ndf = 0;
@@ -114,6 +118,8 @@ struct FitCATS3DResult {
     int MinuitNparx = 0;
     double BkgPar[10] = {1.0, 0.0, 0.0, 0.0, 0.0,
                          0.0, 0.0, 0.0, 0.0, 0.0};
+    double BkgParErr[10] = {0.0, 0.0, 0.0, 0.0, 0.0,
+                            0.0, 0.0, 0.0, 0.0, 0.0};
 
     double Chi2Ndf() const { return Ndf > 0 ? Chi2 / double(Ndf) : 0.0; }
 };

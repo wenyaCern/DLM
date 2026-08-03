@@ -8,16 +8,16 @@ inline FitCATS3DConfig MakeFitCATS3DBaseConfig()
     FitCATS3DConfig cfg;
 
     cfg.InputFileName = "../File/out_3DCF_mT_cent_qn_phi_tofOnly.root";
-    cfg.SameHistoName = "H3_same_cent1_mt2_qn0_phi0";
-    cfg.MixedHistoName = "H3_mixed_cent1_mt2_phi0";
-    cfg.OutputFileName = "../fit_CATS3D_gaussian_cent1_mt2_wtCoulomb.root";
+    cfg.SameHistoName = "H3_same_cent1_mt4_qn0_phi0";
+    cfg.MixedHistoName = "H3_mixed_cent1_mt4_phi0";
+    cfg.OutputFileName = "../fit_CATS3D_gaussian_cent1_mt4_wtCoulomb.root";
 
     cfg.UseSameMixed = true;
     cfg.Identical = true;
     cfg.WithCoulomb = true;
     cfg.UseLambdaFeedDown = true;
     cfg.LambdaFileName = "../File/lam/kStarDepLambda_cent10to30_pion_PbPb.root";
-    cfg.LambdaHistoName = "hPurityKstar_mT0.40to0.50_cent10to30";
+    cfg.LambdaHistoName = "hPurityKstar_mT0.60to0.70_cent10to30";
     cfg.weakDecayFraction = 0.12;
     cfg.RebinFactor = 1;
     cfg.MinuitMaxCalls = 20000;
@@ -72,9 +72,9 @@ inline FitCATS3DConfig MakeFitCATS3DBaseConfig()
     // cfg.RoutInit = 5.61466;
     // cfg.RsideInit = 4.90296;
     // cfg.RlongInit = 4.78343;
-    cfg.RoutInit = 4.5;
+    cfg.RoutInit = 4.0;
     cfg.RsideInit = 4.0;
-    cfg.RlongInit = 3.7;
+    cfg.RlongInit = 3.6;
     cfg.NormInit = 1.0;
     return cfg;
 }
@@ -82,7 +82,7 @@ inline FitCATS3DConfig MakeFitCATS3DBaseConfig()
 inline FitCATS3DConfig MakeFitCATS3DResonanceConfig()
 {
     FitCATS3DConfig cfg = MakeFitCATS3DBaseConfig();
-    cfg.OutputFileName = "../fit_CATS3D_resonance_cent1_mt2_wtCoulomb_levyAlpha2.0.root";
+    cfg.OutputFileName = "../fit_CATS3D_resonance_cent1_mt4_wtCoulomb_levyAlpha2.0.root";
     cfg.UseResonanceSource = true;
     cfg.ResonanceWeight1 = 0.72;
     cfg.ResonanceWeight2 = 0.72;
