@@ -1,0 +1,42 @@
+# Generated builds and figures
+other/build/
+other/build_legacy/
+other/figures/
+**/__pycache__/
+**/.DS_Store
+**/*.swp
+*.d
+*.o
+*.dylib
+
+# Local ROOT input and output data
+inputs/EPOS_data/
+inputs/File/
+inputs/OutputFiles/
+inputs/data/*.root
+inputs/nuclearStructureDatafit/
+inputs/epos/
+inputs/kernels/
+farm/fit/farm_output/
+farm/fit/build/
+farm/fit/logs/
+farm/fit/farm_input/
+farm/fit/paths.sh
+fit/results/
+fit/nuclearStructureDatafit/inputs/
+fit/nuclearStructureDatafit/results/
+
+# Local compatibility links created by inputs/setup_local_paths.py
+other/File
+other/OutputFiles
+other/EPOS_data
+other/farm_output
+other/nuclearStructureDatafit
+
+# Old test archives and legacy data
+other/archive/*.tar.gz
+other/archive/*.manifest.json
+other/archive/legacy/
+other/archive/farm_fit_snapshot_2026-11-19/
+other/archive/archive_test_outputs.py
+other/archive/organize_workspace_2026-11-19.py
