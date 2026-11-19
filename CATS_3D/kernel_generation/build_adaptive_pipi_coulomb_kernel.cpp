@@ -22,12 +22,39 @@ std::vector<double> qEdgesMeV() {
     return e;
 }
 
+// Resolve the rapidly varying femtoscopic peak first, then coarsen toward
+// the high-q baseline. The same axis is used for out, side, and long.
+std::vector<double> farmQEdgesMeV() {
+    std::vector<double> e{0.0};
+    for (int i = 1; i <= 12; ++i) e.push_back(2.5 * i);       // 0..30
+    for (int i = 1; i <= 10; ++i) e.push_back(30.0 + 5.0 * i); // 30..80
+    for (int i = 1; i <= 4; ++i) e.push_back(80.0 + 10.0 * i); // 80..120
+    for (int i = 1; i <= 4; ++i) e.push_back(120.0 + 20.0 * i);// 120..200
+    return e;
+}
+
 std::vector<double> rEdgesFm() {
     std::vector<double> positive{0.0};
     for (int i = 1; i <= 10; ++i) positive.push_back(1.5 * i);
     for (int i = 1; i <= 5; ++i) positive.push_back(15.0 + 3.0 * i);
     positive.push_back(35.0);
     positive.push_back(40.0);
+    std::vector<double> both;
+    both.reserve(2 * positive.size() - 1);
+    for (auto it = positive.rbegin(); it != positive.rend(); ++it) {
+        if (*it > 0.0) both.push_back(-*it);
+    }
+    both.insert(both.end(), positive.begin(), positive.end());
+    return both;
+}
+
+
+// Finer near the Coulomb-sensitive origin; retain the full +/-40 fm range.
+std::vector<double> farmREdgesFm() {
+    std::vector<double> positive{0.0};
+    for (int i = 1; i <= 16; ++i) positive.push_back(0.75 * i);      // 0..12
+    for (int i = 1; i <= 6; ++i) positive.push_back(12.0 + 2.0 * i); // 12..24
+    for (int i = 1; i <= 5; ++i) positive.push_back(24.0 + 3.2 * i); // 24..40
     std::vector<double> both;
     both.reserve(2 * positive.size() - 1);
     for (auto it = positive.rbegin(); it != positive.rend(); ++it) {
@@ -46,15 +73,25 @@ std::vector<double> centers(const std::vector<double>& edges) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc < 2 || argc > 3) {
-        std::cerr << "Usage: build_adaptive_pipi_coulomb_kernel OUTPUT.root [--smoke]\n";
+    if (argc < 2) {
+        std::cerr << "Usage: build_adaptive_pipi_coulomb_kernel OUTPUT.root [--farm] [--smoke] [--estimate]\n";
         return 2;
     }
-    const bool smoke = argc == 3 && std::string(argv[2]) == "--smoke";
-    if (argc == 3 && !smoke) return 2;
+    bool smoke = false, farm = false, estimate = false;
+    for (int i = 2; i < argc; ++i) {
+        const std::string flag(argv[i]);
+        if (flag == "--smoke") smoke = true;
+        else if (flag == "--farm") farm = true;
+        else if (flag == "--estimate") estimate = true;
+        else {
+            std::cerr << "Unknown option: " << flag << '\n';
+            return 2;
+        }
+    }
 
-    auto qEdges = smoke ? std::vector<double>{0.0,5.0} : qEdgesMeV();
-    auto rEdges = rEdgesFm();
+    auto qEdges = smoke ? std::vector<double>{0.0,5.0}
+                        : (farm ? farmQEdgesMeV() : qEdgesMeV());
+    auto rEdges = farm ? farmREdgesFm() : rEdgesFm();
     auto qCenters = centers(qEdges);
     auto rCenters = centers(rEdges);
     const unsigned nQ = unsigned(qCenters.size());
@@ -62,10 +99,13 @@ int main(int argc, char** argv) {
     const size_t nR3 = size_t(nR) * nR * nR;
     const size_t total = size_t(nQ) * nQ * nQ * nR3;
     std::cout << "Adaptive pi+pi+ Coulomb + QS wavefunction kernel\n"
-              << "q: " << nQ << "^3 positive-octant cells, edges 0..200 MeV/c\n"
+              << "q: " << nQ << "^3 positive-octant cells, edges 0.."
+              << qEdges.back() << " MeV/c\n"
               << "r: " << nR << "^3 Cartesian cells, edges -40..40 fm\n"
               << "raw float payload: " << total << " values, " << double(total * sizeof(float)) / 1e9 << " GB\n"
-              << "mode: " << (smoke ? "smoke (one q cell)" : "full") << std::endl;
+              << "mode: " << (farm ? "farm" : "local")
+              << (smoke ? " smoke (one q cell)" : " full") << std::endl;
+    if (estimate) return 0;
 
     CATS3D kitty;
     kitty.SetPdgId(211, 211);
