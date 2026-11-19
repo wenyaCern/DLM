@@ -1,9 +1,0 @@
-/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_3D/build/CMakeFiles/FitCATS3D.dir
-/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_3D/build/CMakeFiles/FitCATS3DResonance.dir
-/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_3D/build/CMakeFiles/run_CATS3D.dir
-/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_3D/build/CMakeFiles/fit_CATS3D.dir
-/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_3D/build/CMakeFiles/fit_CATS3D_resonance.dir
-/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_3D/build/CMakeFiles/source_compare_CATS3D.dir
-/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_3D/build/CMakeFiles/r20_check_CATS3D.dir
-/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_3D/build/CMakeFiles/edit_cache.dir
-/Users/wuwenya/Documents/code/femto_flow/CATS/CATS_install/CATS_3D/build/CMakeFiles/rebuild_cache.dir
