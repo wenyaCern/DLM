@@ -9,6 +9,9 @@ BIN_DIR := ../other/build/kernel_generation
 CPPFLAGS += -I../fit/shared -I../fit/common -I.. -I$(CATS_INCLUDE) $(ROOT_CFLAGS)
 CXXFLAGS += -std=c++17 -O2
 LDLIBS += -L$(CATS_LIBDIR) -Wl,-rpath,$(CATS_LIBDIR) -lCATS -lMinuit $(ROOT_LIBS)
+ifeq ($(shell uname -s),Linux)
+LDLIBS += -fopenmp
+endif
 
 .PHONY: all smoke clean legacy
 all: $(BIN_DIR)/build_adaptive_pipi_coulomb_kernel $(BIN_DIR)/check_adaptive_kernel
