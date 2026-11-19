@@ -8,7 +8,7 @@
 set -euo pipefail
 
 dlm_root=${DLM_ROOT:-/home/ktas/go54bav/DLM}
-kernel_out=${KERNEL_OUT:-/scratch8/Wenya/pipi_coulomb_q30_r54_nonuniform.root}
+kernel_out=${KERNEL_OUT:-/scratch8/Wenya/pipi_coulomb_q24_r72_nonuniform.root}
 
 cd "$dlm_root"
 test -d "$(dirname "$kernel_out")"

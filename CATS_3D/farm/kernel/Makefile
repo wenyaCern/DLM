@@ -1,7 +1,7 @@
 .PHONY: all estimate smoke run check
 GENERATOR := ../../other/build/kernel_generation/build_adaptive_pipi_coulomb_kernel
 CHECKER := ../../other/build/kernel_generation/check_adaptive_kernel
-KERNEL_OUT ?= /scratch8/Wenya/pipi_coulomb_q30_r54_nonuniform.root
+KERNEL_OUT ?= /scratch8/Wenya/pipi_coulomb_q24_r72_nonuniform.root
 SMOKE_OUT := ../../other/build/kernel_generation/smoke_farm_kernel.root
 
 all:

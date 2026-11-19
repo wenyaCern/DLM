@@ -22,14 +22,15 @@ std::vector<double> qEdgesMeV() {
     return e;
 }
 
-// Resolve the rapidly varying femtoscopic peak first, then coarsen toward
-// the high-q baseline. The same axis is used for out, side, and long.
+// The farm grid resolves the Coulomb/femtoscopic region below 40 MeV/c and
+// coarsens toward the high-q baseline. All three positive-q axes are equal.
 std::vector<double> farmQEdgesMeV() {
     std::vector<double> e{0.0};
-    for (int i = 1; i <= 12; ++i) e.push_back(2.5 * i);       // 0..30
-    for (int i = 1; i <= 10; ++i) e.push_back(30.0 + 5.0 * i); // 30..80
-    for (int i = 1; i <= 4; ++i) e.push_back(80.0 + 10.0 * i); // 80..120
-    for (int i = 1; i <= 4; ++i) e.push_back(120.0 + 20.0 * i);// 120..200
+    for (int i = 1; i <= 5; ++i) e.push_back(1.0 * i);        // 0..5
+    for (int i = 1; i <= 4; ++i) e.push_back(5.0 + 2.5 * i);  // 5..15
+    for (int i = 1; i <= 5; ++i) e.push_back(15.0 + 5.0 * i); // 15..40
+    for (int i = 1; i <= 4; ++i) e.push_back(40.0 + 10.0 * i);// 40..80
+    for (int i = 1; i <= 6; ++i) e.push_back(80.0 + 20.0 * i);// 80..200
     return e;
 }
 
@@ -49,12 +50,12 @@ std::vector<double> rEdgesFm() {
 }
 
 
-// Finer near the Coulomb-sensitive origin; retain the full +/-40 fm range.
+// Keep 2 fm spacing through the outer source, with a finer central region.
 std::vector<double> farmREdgesFm() {
     std::vector<double> positive{0.0};
-    for (int i = 1; i <= 16; ++i) positive.push_back(0.75 * i);      // 0..12
-    for (int i = 1; i <= 6; ++i) positive.push_back(12.0 + 2.0 * i); // 12..24
-    for (int i = 1; i <= 5; ++i) positive.push_back(24.0 + 3.2 * i); // 24..40
+    for (int i = 1; i <= 20; ++i) positive.push_back(0.5 * i);            // 0..10
+    for (int i = 1; i <= 6; ++i) positive.push_back(10.0 + 5.0 * i / 3.0);// 10..20
+    for (int i = 1; i <= 10; ++i) positive.push_back(20.0 + 2.0 * i);     // 20..40
     std::vector<double> both;
     both.reserve(2 * positive.size() - 1);
     for (auto it = positive.rbegin(); it != positive.rend(); ++it) {
