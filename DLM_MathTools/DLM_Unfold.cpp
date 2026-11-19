@@ -493,7 +493,7 @@ DLM_Histo<float>* DLM_Unfold::Unfold(const int& TYPE){
     if(dlmDimiWorkHorse){delete dlmDimiWorkHorse; dlmDimiWorkHorse=NULL;}
     dlmDimiWorkHorse = new DLM_Histo<float>(*dlmData_reb2);
 
-    FitFoldOriginal = new TF1("FitFoldOriginal",this,&DLM_Unfold::DimiFit,RangeMinU,RangeMaxU,dlmData_reb2->GetNbins(),"DLM_Unfold","DimiFit");
+    FitFoldOriginal = new TF1("FitFoldOriginal",this,&DLM_Unfold::DimiFit,RangeMinU,RangeMaxU,dlmData_reb2->GetNbins());
     for(unsigned uPar=0; uPar<dlmData_reb2->GetNbins(); uPar++){
       FitFoldOriginal->SetParameter(uPar,dlmData_reb2->GetBinContent(uPar));
       FitFoldOriginal->SetParLimits(uPar,0,2.*dlmData_reb2->GetBinContent(uPar));
@@ -520,7 +520,7 @@ DLM_Histo<float>* DLM_Unfold::Unfold(const int& TYPE){
 
     //if(dlmDimiWorkHorse){delete [] dlmDimiWorkHorse; dlmDimiWorkHorse=NULL;}
     //dlmDimiWorkHorse = new DLM_Histo<float>(*dlmData_reb2);
-    FitFoldFinal = new TF1("FitFoldFinal",this,&DLM_Unfold::DimiFitFolded,RangeMinU,RangeMaxU,dlmData_reb2->GetNbins(),"DLM_Unfold","DimiFitFolded");
+    FitFoldFinal = new TF1("FitFoldFinal",this,&DLM_Unfold::DimiFitFolded,RangeMinU,RangeMaxU,dlmData_reb2->GetNbins());
 
     if(!Silent) printf("Pre-fit:\n");
     f_chi2*=100;
@@ -558,7 +558,7 @@ for(unsigned uRefit=0; uRefit<1; uRefit++){
 
     //if(dlmDimiWorkHorse){delete [] dlmDimiWorkHorse; dlmDimiWorkHorse=NULL;}
     //dlmDimiWorkHorse = new DLM_Histo<float>(*dlmData_reb2);
-    FitUnfoldFinal = new TF1("FitUnfoldFinal",this,&DLM_Unfold::DimiFit,RangeMinU,RangeMaxU,dlmData_reb2->GetNbins(),"DLM_Unfold","DimiFit");
+    FitUnfoldFinal = new TF1("FitUnfoldFinal",this,&DLM_Unfold::DimiFit,RangeMinU,RangeMaxU,dlmData_reb2->GetNbins());
     for(unsigned uPar=0; uPar<dlmData_reb2->GetNbins(); uPar++){
       FitUnfoldFinal->SetParameter(uPar,FitFoldFinal->GetParameter(uPar));
       FitUnfoldFinal->SetParLimits(uPar,0,FitFoldFinal->GetParameter(uPar)*10.);
@@ -568,7 +568,7 @@ for(unsigned uRefit=0; uRefit<1; uRefit++){
   else if(TYPE==0){
     if(FitFoldOriginal){delete FitFoldOriginal; FitFoldOriginal=NULL;}
     gROOT->cd();
-    FitFoldOriginal = new TF1("FitFoldOriginal",this,&DLM_Unfold::SplineFit,RangeMinU,RangeMaxU,3+NumKnots*2,"DLM_Unfold","SplineFit");
+    FitFoldOriginal = new TF1("FitFoldOriginal",this,&DLM_Unfold::SplineFit,RangeMinU,RangeMaxU,3+NumKnots*2);
     FitFoldOriginal->FixParameter(0,NumKnots);
     //derivative at the firs knot
 //FitFoldOriginal->SetParameter(1,0);
@@ -601,7 +601,7 @@ for(unsigned uRefit=0; uRefit<1; uRefit++){
 
     if(FitFoldFinal){delete FitFoldFinal; FitFoldFinal=NULL;}
     gROOT->cd();
-    FitFoldFinal = new TF1("FitFoldFinal",this,&DLM_Unfold::SplineFitFolded,RangeMinU,RangeMaxU,3+NumKnots*2,"DLM_Unfold","SplineFitFolded");
+    FitFoldFinal = new TF1("FitFoldFinal",this,&DLM_Unfold::SplineFitFolded,RangeMinU,RangeMaxU,3+NumKnots*2);
 
     if(!Silent) printf("Pre-fit:\n");
     f_chi2*=100;
@@ -649,7 +649,7 @@ FitFoldFinal->SetParLimits(3+NumKnots+uKnot,0,FitFoldOriginal->GetParameter(3+Nu
 
     if(FitUnfoldFinal){delete FitUnfoldFinal; FitUnfoldFinal=NULL;}
     gROOT->cd();
-    FitUnfoldFinal = new TF1("FitUnfoldFinal",this,&DLM_Unfold::SplineFitUnfolded,RangeMinU,RangeMaxU,3+NumKnots*2,"DLM_Unfold","SplineFitUnfolded");
+    FitUnfoldFinal = new TF1("FitUnfoldFinal",this,&DLM_Unfold::SplineFitUnfolded,RangeMinU,RangeMaxU,3+NumKnots*2);
     for(unsigned uPar=0; uPar<3+NumKnots*2; uPar++){
       FitUnfoldFinal->SetParameter(uPar,FitFoldFinal->GetParameter(uPar));
     }
@@ -1212,7 +1212,7 @@ DLM_Histo<float>* DLM_Unfold::UnfoldDimi(){
     dlmDimiWorkHorse = new DLM_Histo<float>(*dlmData_reb2);
     gROOT->cd();
     unsigned NumPars = dlmData_reb2->GetBin(0,RangeMaxU)-dlmData_reb2->GetBin(0,RangeMinU);
-    TF1* FitTempFold = new TF1(TString::Format("FitFoldFinal_%u",uReb),this,&DLM_Unfold::DimiFitFolded,RangeMinU,RangeMaxU,dlmData_reb2->GetNbins(),"DLM_Unfold","DimiFitFolded");
+    TF1* FitTempFold = new TF1(TString::Format("FitFoldFinal_%u",uReb).Data(),this,&DLM_Unfold::DimiFitFolded,RangeMinU,RangeMaxU,dlmData_reb2->GetNbins());
     double xVal;
     for(unsigned uPar=0; uPar<dlmData_reb2->GetNbins(); uPar++){
       xVal = dlmData_reb2->GetBinCenter(0,uPar);
@@ -1246,7 +1246,7 @@ DLM_Histo<float>* DLM_Unfold::UnfoldDimi(){
     gROOT->cd();
     if(FitUnfoldFinal){delete FitUnfoldFinal; FitUnfoldFinal=NULL;}
 //printf("new\n");
-    FitUnfoldFinal = new TF1(TString::Format("FitUnfoldFinal_%u",uReb),this,&DLM_Unfold::DimiFit,RangeMinU,RangeMaxU,dlmData_reb2->GetNbins(),"DLM_Unfold","DimiFit");
+    FitUnfoldFinal = new TF1(TString::Format("FitUnfoldFinal_%u",uReb).Data(),this,&DLM_Unfold::DimiFit,RangeMinU,RangeMaxU,dlmData_reb2->GetNbins());
 //printf("uPar\n");
     for(unsigned uPar=0; uPar<dlmData_reb2->GetNbins(); uPar++){
       xVal = dlmData_reb2->GetBinCenter(0,uPar);

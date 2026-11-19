@@ -1419,7 +1419,7 @@ void DLM_Fitter1::GoBabyGo(const bool& show_fit_info){
     if(HistoGlobal) delete HistoGlobal;
     HistoGlobal = new TH1F(TString::Format("HistoGlobal%p",this), TString::Format("HistoGlobal%p",this), NumBinsGlobal, 0, 1);
     if(FitGlobal) delete FitGlobal;
-    FitGlobal = new TF1(TString::Format("FitGlobal%p",this), this, &DLM_Fitter1::EvalGlobal,0,1,ActualNumSyst*NumPar,"DLM_Fitter1","EvalGlobal");
+    FitGlobal = new TF1(TString::Format("FitGlobal%p",this).Data(), this, &DLM_Fitter1::EvalGlobal,0,1,ActualNumSyst*NumPar);
 
     unsigned uBinGlob=0;
     //unsigned uActSyst=0;
