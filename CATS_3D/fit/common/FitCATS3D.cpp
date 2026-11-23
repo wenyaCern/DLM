@@ -868,8 +868,9 @@ void ConfigureKittyForData(CATS3D& kitty,
     kitty.SetGridX(cfg.NumGridBins, cfg.gridMinFm, cfg.gridMaxFm);
     kitty.SetGridY(cfg.NumGridBins, cfg.gridMinFm, cfg.gridMaxFm);
     kitty.SetGridZ(cfg.NumGridBins, cfg.gridMinFm, cfg.gridMaxFm);
-    kitty.SetFastKernelMode(cfg.UseFastKernel);
-    kitty.SetFastKernelSubdivisions(cfg.FastKernelSubdivisions);
+    kitty.SetFastKernelMode(cfg.UseAdaptiveKernel ? false : cfg.UseFastKernel);
+    if(!cfg.UseAdaptiveKernel)
+        kitty.SetFastKernelSubdivisions(cfg.FastKernelSubdivisions);
 
     CATSparameters sourcePars(CATSparameters::tSource3D, 3, true);
     sourcePars.SetParameter(0, cfg.RoutInit);
@@ -894,10 +895,13 @@ void ConfigureKittyForData(CATS3D& kitty,
     }
     else {
         kitty.SetAnaSource(Basics_Source_Gauss3D, sourcePars);
-        std::cout << "CATS3D source mode: Gaussian"
-                  << " fastKernel=" << (cfg.UseFastKernel ? "on" : "off")
-                  << " fastSubdiv=" << cfg.FastKernelSubdivisions
-                  << "\n";
+        if(cfg.UseAdaptiveKernel)
+            std::cout << "CATS3D source mode: Gaussian; kernel=adaptive precomputed wavefunction\n";
+        else
+            std::cout << "CATS3D source mode: Gaussian"
+                      << " fastKernel=" << (cfg.UseFastKernel ? "on" : "off")
+                      << " fastSubdiv=" << cfg.FastKernelSubdivisions
+                      << "\n";
     }
 
     if(cfg.Identical) kitty.SetPdgId(211, 211);
