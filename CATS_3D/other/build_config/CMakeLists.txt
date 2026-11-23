@@ -6,6 +6,12 @@ get_filename_component(CATS3D_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Farm libCATS.so is built with OpenMP. Its consumers must also link the
+# OpenMP runtime, including the final fit executable.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_package(OpenMP REQUIRED COMPONENTS CXX)
+endif()
+
 # CATS installation can be overridden on the farm with -DCATS_PATH=...
 set(CATS_PATH "${CATS3D_ROOT}/../install" CACHE PATH "CATS installation prefix")
 
@@ -49,6 +55,9 @@ function(configure_cats3d_target target_name)
     Minuit
     ${ROOT_LIBS}
   )
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(${target_name} PRIVATE OpenMP::OpenMP_CXX)
+  endif()
 endfunction()
 
 add_library(FitCATS3D SHARED
