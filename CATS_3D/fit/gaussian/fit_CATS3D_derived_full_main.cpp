@@ -3,20 +3,42 @@
 #include "TROOT.h"
 
 #include <filesystem>
+#include <array>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 int main(int argc, char** argv)
 {
     gROOT->SetBatch(true);
     if(argc < 4){
-        std::cerr << "Usage: fit_CATS3D_derived_full MT_INDEX QN_INDEX PHI_INDEX [rinit=R] [rmin=R] [fitqmax=MEV] [lambda-after-dca-cut] [weakfraction=F] [adaptive-kernel=PATH] [smearfile=PATH] [diagonal-band] [band-fixed] [kernel-fitbox-only] [no-simplex] [output=PATH]\n";
+        std::cerr << "Usage: fit_CATS3D_derived_full MT QN PHI [options], or --batch MT QN_FIRST QN_LAST PHI_FIRST PHI_LAST [options]\n";
         return 2;
     }
     try{
-        auto cfg = MakeFitCATS3DDerivedFullBminusConfig(
-            std::stoi(argv[1]), std::stoi(argv[2]), std::stoi(argv[3]));
-        for(int i=4; i<argc; ++i){
+        const bool batch=std::string(argv[1])=="--batch";
+        std::vector<std::array<int,3>> cells;
+        int firstOption=4;
+        if(batch){
+            if(argc<7) throw std::runtime_error("Batch needs MT QN_FIRST QN_LAST PHI_FIRST PHI_LAST");
+            const int mt=std::stoi(argv[2]);
+            const int qnFirst=std::stoi(argv[3]), qnLast=std::stoi(argv[4]);
+            const int phiFirst=std::stoi(argv[5]), phiLast=std::stoi(argv[6]);
+            if(mt<0 || mt>2 || qnFirst<0 || qnLast>4 || qnFirst>qnLast ||
+               phiFirst<0 || phiLast>5 || phiFirst>phiLast)
+                throw std::runtime_error("Invalid batch cell range");
+            for(int qn=qnFirst;qn<=qnLast;++qn)
+                for(int phi=phiFirst;phi<=phiLast;++phi)
+                    cells.push_back({mt,qn,phi});
+            firstOption=7;
+        } else {
+            cells.push_back({std::stoi(argv[1]),std::stoi(argv[2]),std::stoi(argv[3])});
+        }
+        int failures=0;
+        for(const auto& cell:cells){
+        auto cfg = MakeFitCATS3DDerivedFullBminusConfig(cell[0],cell[1],cell[2]);
+        const TString batchOutput=cfg.OutputFileName;
+        for(int i=firstOption; i<argc; ++i){
             const std::string arg(argv[i]);
             if(arg.rfind("adaptive-kernel=",0) == 0){
                 cfg.UseAdaptiveKernel=true;
@@ -59,6 +81,7 @@ int main(int argc, char** argv)
                 cfg.OutputBaselineOutsideFitBox = true;
             }
             else if(arg.rfind("output=",0) == 0){
+                if(batch) throw std::runtime_error("Use CATS3D_FIT_OUTPUT_DIR for batch output");
                 cfg.OutputFileName = arg.substr(7).c_str();
             }
             else if(arg.rfind("rinit=",0) == 0){
@@ -89,10 +112,23 @@ int main(int argc, char** argv)
             }
             else throw std::runtime_error("Unknown fit mode");
         }
+        if(batch) cfg.OutputFileName=batchOutput;
         std::filesystem::create_directories(
             std::filesystem::path(cfg.OutputFileName.Data()).parent_path());
-        const auto result = FitDataCATS3D(cfg);
-        return result.FitStatus == 0 ? 0 : 3;
+        std::cout << "\n=== CATS3D cell mT=" << cell[0] << " qn=" << cell[1]
+                  << " phi=" << cell[2] << " ===\n";
+        try{
+            const auto result = FitDataCATS3D(cfg);
+            if(result.FitStatus!=0) ++failures;
+        }catch(const std::exception& e){
+            std::cerr << "Cell failed: " << e.what() << '\n';
+            ++failures;
+            if(!batch) throw;
+        }
+        }
+        std::cout << "CATS3D completed " << cells.size()-failures << "/"
+                  << cells.size() << " cells\n";
+        return failures ? 3 : 0;
     }
     catch(const std::exception& e){
         std::cerr << "fit_CATS3D_derived_full: " << e.what() << '\n';

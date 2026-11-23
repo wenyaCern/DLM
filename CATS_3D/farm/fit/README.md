@@ -54,6 +54,18 @@ The runner skips the SIMPLEX pre-search by default and keeps MIGRAD and HESSE.
 The local low-mT reference cell converged to the same radii without SIMPLEX.
 Set `CATS3D_USE_SIMPLEX=1` if another cell does not converge.
 
+Run adjacent cells in one process to load the 20.6 GB kernel once:
+
+```sh
+bash CATS_3D/farm/fit/run_full_range.sh --batch 0 0 4 0 5 \
+  > CATS_3D/farm/fit/logs/fit_mt0_batch.log 2>&1
+```
+
+This example fits all qn and phi cells for mT index 0. Each cell still has its
+own data, baseline prefit, Minuit fit, and ROOT output. The in-memory kernel
+is reused until the batch process exits. Keep the batch on one mT index because
+its weak-decay fraction and radius initial value are set per mT.
+
 The Gaussian derived-data runner uses the adaptive kernel directly. The old
 external fast-kernel implementation remains available only to legacy
 resonance and O-O fit targets that still reference its format.

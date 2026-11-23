@@ -27,6 +27,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace {
@@ -70,7 +71,7 @@ struct FitState3D {
     TH3D* same = nullptr;
     TH3D* mixed = nullptr;
     CATS3D* kitty = nullptr;
-    std::unique_ptr<AdaptivePipiKernel> AdaptiveKernel;
+    std::shared_ptr<AdaptivePipiKernel> AdaptiveKernel;
     std::vector<double> QSmearing[3];
     int nFitBins = 0;
     int nFcnCalls = 0;
@@ -93,6 +94,8 @@ struct FitState3D {
 
 FitState3D* gFitState3D = nullptr;
 FitState3D* gBkgPrefitState3D = nullptr;
+std::shared_ptr<AdaptivePipiKernel> gSharedAdaptiveKernel;
+std::string gSharedAdaptiveKernelPath;
 double gBkgRejectQminMeV = 100.0;
 double gBkgRejectQmaxMeV = 200.0;
 double gBkgQAxisScaleToMeV = 1000.0;
@@ -1788,9 +1791,16 @@ FitCATS3DResult FitDataCATS3DImpl(const FitCATS3DConfig& cfg,
         if(!cfg.AdaptiveKernelFileName.Length())
             throw std::runtime_error("AdaptiveKernelFileName is empty");
         const auto tKernel0=Clock3D::now();
-        state.AdaptiveKernel.reset(new AdaptivePipiKernel(cfg.AdaptiveKernelFileName.Data()));
+        const std::string kernelPath=cfg.AdaptiveKernelFileName.Data();
+        if(!gSharedAdaptiveKernel || gSharedAdaptiveKernelPath!=kernelPath){
+            gSharedAdaptiveKernel=std::make_shared<AdaptivePipiKernel>(kernelPath);
+            gSharedAdaptiveKernelPath=kernelPath;
+        } else {
+            std::cout << "Reusing adaptive kernel already loaded in this process\n";
+        }
+        state.AdaptiveKernel=gSharedAdaptiveKernel;
         state.Profile.LoadExternalKernelSec=SecondsSince(tKernel0);
-        std::cout << "Adaptive kernel loaded in " << state.Profile.LoadExternalKernelSec << " s\n";
+        std::cout << "Adaptive kernel ready in " << state.Profile.LoadExternalKernelSec << " s\n";
     }
 
     if(cfg.UseExternalFastKernel){
