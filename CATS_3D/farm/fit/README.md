@@ -42,8 +42,10 @@ Detach screen with Ctrl-A, D. Output is written under
 The directory name is retained for overwriting the previous fit; the actual
 fit limit is 120 MeV/c. The runner overwrites an existing cell by default.
 The full kernel is about 20.6 GB on disk and is kept at full spatial
-resolution in memory. The fold uses four independent accumulators; no
-spatial cells are merged. Benchmark this one cell before
+resolution in memory. The fold uses four independent accumulators per thread
+and defaults to four threads (`CATS3D_FOLD_THREADS=4`) on the farm; no
+spatial cells are merged. Set the variable to 1 if only one CPU is available.
+Benchmark this one cell before
 launching further cells. The preflight `--check` verifies input paths and
 executable presence without loading the kernel. The old farm path convention
 is preserved only in the archived snapshot.

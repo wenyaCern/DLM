@@ -5,9 +5,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <thread>
 
 namespace {
 void CheckEdges(const std::vector<double>& edges, const char* name)
@@ -16,6 +18,17 @@ void CheckEdges(const std::vector<double>& edges, const char* name)
     for(size_t i=1; i<edges.size(); ++i)
         if(!std::isfinite(edges[i]) || edges[i] <= edges[i-1])
             throw std::runtime_error(std::string("Non-increasing kernel axis: ") + name);
+}
+
+unsigned FoldThreadCount()
+{
+    const char* value=std::getenv("CATS3D_FOLD_THREADS");
+    if(!value || !*value) return 1;
+    char* end=nullptr;
+    const long count=std::strtol(value,&end,10);
+    if(*end || count<1 || count>16)
+        throw std::runtime_error("CATS3D_FOLD_THREADS must be an integer from 1 to 16");
+    return unsigned(count);
 }
 }
 
@@ -136,21 +149,37 @@ std::vector<double> AdaptivePipiKernel::Fold(double rout,double rside,double rlo
               axisWeights[0][ix]*axisWeights[1][iy]*axisWeights[2][iz];
     const size_t nQ3=size_t(nQ_[0])*nQ_[1]*nQ_[2];
     std::vector<double> result(nQ3);
-    for(size_t q=0;q<nQ3;++q){
-        const float* wf=wavefunction2_.data()+q*nR3_;
-        // Independent accumulators remove the long floating-point dependency
-        // chain. Every spatial cell is still evaluated with its own weight.
-        double sum0=0, sum1=0, sum2=0, sum3=0;
-        size_t r=0;
-        for(;r+3<nR3_;r+=4){
-            sum0+=double(wf[r])*source[r];
-            sum1+=double(wf[r+1])*source[r+1];
-            sum2+=double(wf[r+2])*source[r+2];
-            sum3+=double(wf[r+3])*source[r+3];
+    const auto foldRange=[&](size_t first,size_t last){
+        for(size_t q=first;q<last;++q){
+            const float* wf=wavefunction2_.data()+q*nR3_;
+            // Every spatial cell keeps its own source weight.
+            double sum0=0, sum1=0, sum2=0, sum3=0;
+            size_t r=0;
+            for(;r+3<nR3_;r+=4){
+                sum0+=double(wf[r])*source[r];
+                sum1+=double(wf[r+1])*source[r+1];
+                sum2+=double(wf[r+2])*source[r+2];
+                sum3+=double(wf[r+3])*source[r+3];
+            }
+            double sum=(sum0+sum1)+(sum2+sum3);
+            for(;r<nR3_;++r) sum+=double(wf[r])*source[r];
+            result[q]=sum;
         }
-        double sum=(sum0+sum1)+(sum2+sum3);
-        for(;r<nR3_;++r) sum+=double(wf[r])*source[r];
-        result[q]=sum;
+    };
+    const unsigned workers=std::min<size_t>(FoldThreadCount(),nQ3);
+    if(workers==1){
+        foldRange(0,nQ3);
+    } else {
+        const size_t chunk=(nQ3+workers-1)/workers;
+        std::vector<std::thread> threads;
+        threads.reserve(workers-1);
+        for(unsigned worker=1;worker<workers;++worker){
+            const size_t first=std::min(nQ3,size_t(worker)*chunk);
+            const size_t last=std::min(nQ3,first+chunk);
+            threads.emplace_back(foldRange,first,last);
+        }
+        foldRange(0,std::min(nQ3,chunk));
+        for(auto& thread:threads) thread.join();
     }
     return result;
 }

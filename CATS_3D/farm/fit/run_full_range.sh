@@ -30,7 +30,9 @@ fi
 : "${CATS3D_FIT_OUTPUT_DIR:=$script_dir/farm_output/cent0to10_peak100_afterDCA_weak155}"
 : "${CATS3D_LAMBDA_SELECTION:=aftercut}"
 : "${CATS3D_FIT_QMAX_MEV:=120}"
+: "${CATS3D_FOLD_THREADS:=4}"
 : "${CATS3D_OVERWRITE:=1}"
+export CATS3D_FOLD_THREADS
 if (( mt == 0 )); then
   : "${CATS3D_WEAK_FRACTION:=0.155}"
 else
@@ -58,6 +60,7 @@ echo "Data: $CATS3D_DERIVED_CF"
 echo "Lambda: $CATS3D_LAMBDA_FILE :: $CATS3D_LAMBDA_SELECTION"
 echo "Smearing: $CATS3D_SMEARING_FILE"
 echo "Kernel: $CATS3D_KERNEL_FILE"
+echo "Kernel fold threads: $CATS3D_FOLD_THREADS"
 echo "Weak-decay fraction per pion: $CATS3D_WEAK_FRACTION"
 echo "Fit box: |q_out|, |q_side|, |q_long| < $CATS3D_FIT_QMAX_MEV MeV/c"
 echo "Outer-box baseline and output: up to 200 MeV/c"
