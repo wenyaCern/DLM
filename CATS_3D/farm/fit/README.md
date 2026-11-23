@@ -8,9 +8,11 @@ and submission scripts are archived under
 
 Local farm results remain in `farm_output/` and are excluded from Git.
 
-The Gaussian full-range runner is `run_full_range.sh`. It fits one
-`(mT, qn, phi)` cell at a time over the entire Cartesian
-`|q_out|, |q_side|, |q_long| < 0.2 GeV/c` box. It uses the same baseline
+The Gaussian runner is `run_full_range.sh`. It fits one
+`(mT, qn, phi)` cell at a time in the Cartesian
+`|q_out|, |q_side|, |q_long| < 0.12 GeV/c` peak box by default. The baseline
+is prefitted in the outer box and the saved prediction extends to 0.2 GeV/c.
+Set `CATS3D_FIT_QMAX_MEV` to change the peak fit box. It uses the same baseline
 prefit, diagonal band, k*-dependent lambda, factorized 3D smearing, and
 Gaussian source as the local single-cell test. `lambdaAfterDCACut` and a
 single-pion weak-decay fraction of 0.155 are the defaults for mT index 0.
@@ -36,8 +38,16 @@ bash CATS_3D/farm/fit/run_full_range.sh 0 0 0 \
 ```
 
 Detach screen with Ctrl-A, D. Output is written under
-`CATS_3D/farm/fit/farm_output/cent0to10_fullQ_afterDCA_weak155/`.
-The full kernel is over 20 GB in memory; benchmark this one cell before
+`CATS_3D/farm/fit/farm_output/cent0to10_peak100_afterDCA_weak155/`.
+The directory name is retained for overwriting the previous fit; the actual
+fit limit is 120 MeV/c. The runner overwrites an existing cell by default.
+The full kernel is about 20.6 GB on disk and is kept at full spatial
+resolution in memory. The fold uses four independent accumulators; no
+spatial cells are merged. Benchmark this one cell before
 launching further cells. The preflight `--check` verifies input paths and
 executable presence without loading the kernel. The old farm path convention
 is preserved only in the archived snapshot.
+
+The Gaussian derived-data runner uses the adaptive kernel directly. The old
+external fast-kernel implementation remains available only to legacy
+resonance and O-O fit targets that still reference its format.

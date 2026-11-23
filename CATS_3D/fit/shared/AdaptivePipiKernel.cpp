@@ -138,8 +138,18 @@ std::vector<double> AdaptivePipiKernel::Fold(double rout,double rside,double rlo
     std::vector<double> result(nQ3);
     for(size_t q=0;q<nQ3;++q){
         const float* wf=wavefunction2_.data()+q*nR3_;
-        double sum=0;
-        for(size_t r=0;r<nR3_;++r) sum+=double(wf[r])*source[r];
+        // Independent accumulators remove the long floating-point dependency
+        // chain. Every spatial cell is still evaluated with its own weight.
+        double sum0=0, sum1=0, sum2=0, sum3=0;
+        size_t r=0;
+        for(;r+3<nR3_;r+=4){
+            sum0+=double(wf[r])*source[r];
+            sum1+=double(wf[r+1])*source[r+1];
+            sum2+=double(wf[r+2])*source[r+2];
+            sum3+=double(wf[r+3])*source[r+3];
+        }
+        double sum=(sum0+sum1)+(sum2+sum3);
+        for(;r<nR3_;++r) sum+=double(wf[r])*source[r];
         result[q]=sum;
     }
     return result;

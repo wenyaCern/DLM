@@ -27,8 +27,10 @@ fi
 : "${CATS3D_LAMBDA_FILE:=$CATS3D_ROOT/inputs/data/PbPb_cent0to10_lambda_gen_vs_kstar_mt.root}"
 : "${CATS3D_SMEARING_FILE:=$CATS3D_ROOT/inputs/data/AnalysisResults_lambdaPara_smearing_mTdiff.root}"
 : "${CATS3D_KERNEL_FILE:=/scratch8/Wenya/pipi_coulomb_q24_r72_nonuniform.root}"
-: "${CATS3D_FIT_OUTPUT_DIR:=$script_dir/farm_output/cent0to10_fullQ_afterDCA_weak155}"
+: "${CATS3D_FIT_OUTPUT_DIR:=$script_dir/farm_output/cent0to10_peak100_afterDCA_weak155}"
 : "${CATS3D_LAMBDA_SELECTION:=aftercut}"
+: "${CATS3D_FIT_QMAX_MEV:=120}"
+: "${CATS3D_OVERWRITE:=1}"
 if (( mt == 0 )); then
   : "${CATS3D_WEAK_FRACTION:=0.155}"
 else
@@ -57,7 +59,8 @@ echo "Lambda: $CATS3D_LAMBDA_FILE :: $CATS3D_LAMBDA_SELECTION"
 echo "Smearing: $CATS3D_SMEARING_FILE"
 echo "Kernel: $CATS3D_KERNEL_FILE"
 echo "Weak-decay fraction per pion: $CATS3D_WEAK_FRACTION"
-echo "Fit box: |q_out|, |q_side|, |q_long| < 200 MeV/c"
+echo "Fit box: |q_out|, |q_side|, |q_long| < $CATS3D_FIT_QMAX_MEV MeV/c"
+echo "Outer-box baseline and output: up to 200 MeV/c"
 echo "Output: $out_file"
 [[ ${4:-} == --check ]] && exit 0
 
@@ -68,7 +71,7 @@ mkdir -p "$out_dir"
 }
 cd "$CATS3D_ROOT/fit/gaussian"
 "$exe" "$mt" "$qn" "$phi" \
-  "rinit=$CATS3D_RINIT" fitqmax=200 "weakfraction=$CATS3D_WEAK_FRACTION" diagonal-band band-fixed \
+  "rinit=$CATS3D_RINIT" "fitqmax=$CATS3D_FIT_QMAX_MEV" "weakfraction=$CATS3D_WEAK_FRACTION" diagonal-band band-fixed kernel-fitbox-only \
   "${lambda_args[@]}" \
   "adaptive-kernel=$CATS3D_KERNEL_FILE" \
   "smearfile=$CATS3D_SMEARING_FILE" \

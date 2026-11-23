@@ -160,14 +160,13 @@ inline FitCATS3DConfig MakeFitCATS3DDerivedFullBminusConfig(
     cfg.ResonanceAlphaInit = 2.0;
     cfg.FixResonanceAlpha = true;
 
-    cfg.UseFastKernel = true;
-    cfg.FastKernelSubdivisions = 1;
-    cfg.UseExternalFastKernel = true;
-    cfg.ExternalFastKernelByQ = true;
-    cfg.ExternalFastKernelFileName = CATS3DPathFromEnv(
-        "CATS3D_KERNEL_FILE", "../../inputs/OutputFiles/dataKernel_qData_r31_coulomb_byQ.root");
-    cfg.ExternalFastKernelTreeName = "CATS3DFastKernel6DByQ";
-    cfg.UseModelCache = false;
+    cfg.UseFastKernel = false;
+    cfg.UseExternalFastKernel = false;
+    cfg.UseAdaptiveKernel = true;
+    cfg.AdaptiveKernelFileName = CATS3DPathFromEnv(
+        "CATS3D_KERNEL_FILE", "../../inputs/OutputFiles/adaptive_pipi_coulomb_q19_r34_byQ.root");
+    cfg.UseModelCache = true;
+    cfg.ModelCacheToleranceFm = 0.02;
     cfg.NumGridBins = 31;
     cfg.relativeMomentumFactor = 0.5;
     return cfg;
