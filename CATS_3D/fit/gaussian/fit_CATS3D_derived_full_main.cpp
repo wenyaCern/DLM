@@ -10,7 +10,7 @@ int main(int argc, char** argv)
 {
     gROOT->SetBatch(true);
     if(argc < 4){
-        std::cerr << "Usage: fit_CATS3D_derived_full MT_INDEX QN_INDEX PHI_INDEX [axis-slices] [rinit=R] [rmin=R] [lambda083] [lambda085] [fine-kernel-derived-lambda] [adaptive-kernel=PATH]\n";
+        std::cerr << "Usage: fit_CATS3D_derived_full MT_INDEX QN_INDEX PHI_INDEX [axis-slices] [rinit=R] [rmin=R] [fitqmax=MEV] [lambda-after-dca-cut] [weak155] [adaptive-kernel=PATH] [smearfile=PATH] [output=PATH]\n";
         return 2;
     }
     try{
@@ -64,8 +64,17 @@ int main(int argc, char** argv)
                     "../../inputs/data/PbPb_cent0to10_lambda_gen_derived_fullPt.root");
                 cfg.LambdaHistoName = "lambdaFitWindow";
             }
+            else if(arg == "lambda-after-dca-cut"){
+                cfg.LambdaHistoName = "lambdaAfterDCACut";
+            }
             else if(arg == "weak155"){
                 cfg.weakDecayFraction = 0.155;
+            }
+            else if(arg.rfind("weakfraction=",0) == 0){
+                const double fraction = std::stod(arg.substr(13));
+                if(fraction < 0.0 || fraction >= 1.0)
+                    throw std::runtime_error("weakfraction must be within [0, 1)");
+                cfg.weakDecayFraction = fraction;
             }
             else if(arg == "smear3d"){
                 cfg.UseFactorizedQSmearing = true;
@@ -114,6 +123,12 @@ int main(int argc, char** argv)
                 tag.ReplaceAll(".", "p");
                 tag.ReplaceAll("proot", ".root");
                 cfg.OutputFileName.ReplaceAll(".root", tag);
+            }
+            else if(arg.rfind("fitqmax=",0) == 0){
+                const double qmax = std::stod(arg.substr(8));
+                if(qmax <= 0.0 || qmax > 200.0)
+                    throw std::runtime_error("fitqmax must be within (0, 200] MeV/c");
+                cfg.fitQmaxMeV = qmax;
             }
             else throw std::runtime_error("Unknown fit mode");
         }
