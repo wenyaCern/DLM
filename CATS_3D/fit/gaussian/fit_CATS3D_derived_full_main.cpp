@@ -10,7 +10,7 @@ int main(int argc, char** argv)
 {
     gROOT->SetBatch(true);
     if(argc < 4){
-        std::cerr << "Usage: fit_CATS3D_derived_full MT_INDEX QN_INDEX PHI_INDEX [rinit=R] [rmin=R] [fitqmax=MEV] [lambda-after-dca-cut] [weakfraction=F] [adaptive-kernel=PATH] [smearfile=PATH] [diagonal-band] [band-fixed] [kernel-fitbox-only] [output=PATH]\n";
+        std::cerr << "Usage: fit_CATS3D_derived_full MT_INDEX QN_INDEX PHI_INDEX [rinit=R] [rmin=R] [fitqmax=MEV] [lambda-after-dca-cut] [weakfraction=F] [adaptive-kernel=PATH] [smearfile=PATH] [diagonal-band] [band-fixed] [kernel-fitbox-only] [no-simplex] [output=PATH]\n";
         return 2;
     }
     try{
@@ -51,6 +51,9 @@ int main(int argc, char** argv)
             }
             else if(arg == "band-fixed"){
                 cfg.FixBandAmplitude = true;
+            }
+            else if(arg == "no-simplex"){
+                cfg.RunMinuitSimplexFirst = false;
             }
             else if(arg == "kernel-fitbox-only"){
                 cfg.OutputBaselineOutsideFitBox = true;

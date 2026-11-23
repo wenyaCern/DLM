@@ -50,6 +50,10 @@ launching further cells. The preflight `--check` verifies input paths and
 executable presence without loading the kernel. The old farm path convention
 is preserved only in the archived snapshot.
 
+The runner skips the SIMPLEX pre-search by default and keeps MIGRAD and HESSE.
+The local low-mT reference cell converged to the same radii without SIMPLEX.
+Set `CATS3D_USE_SIMPLEX=1` if another cell does not converge.
+
 The Gaussian derived-data runner uses the adaptive kernel directly. The old
 external fast-kernel implementation remains available only to legacy
 resonance and O-O fit targets that still reference its format.

@@ -10,5 +10,6 @@ export CATS3D_FIT_OUTPUT_DIR="$CATS3D_ROOT/farm/fit/farm_output/cent0to10_peak10
 export CATS3D_LAMBDA_SELECTION="aftercut"  # or fitwindow
 # export CATS3D_FIT_QMAX_MEV="120"
 # export CATS3D_FOLD_THREADS="4"
+# export CATS3D_USE_SIMPLEX="0"
 # mT index 0 uses 0.155 by default. Set an mT-specific value for indices 1, 2.
 # export CATS3D_WEAK_FRACTION="0.155"

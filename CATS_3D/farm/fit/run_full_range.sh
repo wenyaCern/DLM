@@ -31,8 +31,14 @@ fi
 : "${CATS3D_LAMBDA_SELECTION:=aftercut}"
 : "${CATS3D_FIT_QMAX_MEV:=120}"
 : "${CATS3D_FOLD_THREADS:=4}"
+: "${CATS3D_USE_SIMPLEX:=0}"
 : "${CATS3D_OVERWRITE:=1}"
 export CATS3D_FOLD_THREADS
+case $CATS3D_USE_SIMPLEX in
+  0) simplex_args=(no-simplex) ;;
+  1) simplex_args=() ;;
+  *) echo "CATS3D_USE_SIMPLEX must be 0 or 1" >&2; exit 2 ;;
+esac
 if (( mt == 0 )); then
   : "${CATS3D_WEAK_FRACTION:=0.155}"
 else
@@ -61,6 +67,7 @@ echo "Lambda: $CATS3D_LAMBDA_FILE :: $CATS3D_LAMBDA_SELECTION"
 echo "Smearing: $CATS3D_SMEARING_FILE"
 echo "Kernel: $CATS3D_KERNEL_FILE"
 echo "Kernel fold threads: $CATS3D_FOLD_THREADS"
+echo "Minuit SIMPLEX pre-search: $CATS3D_USE_SIMPLEX"
 echo "Weak-decay fraction per pion: $CATS3D_WEAK_FRACTION"
 echo "Fit box: |q_out|, |q_side|, |q_long| < $CATS3D_FIT_QMAX_MEV MeV/c"
 echo "Outer-box baseline and output: up to 200 MeV/c"
@@ -78,4 +85,5 @@ cd "$CATS3D_ROOT/fit/gaussian"
   "${lambda_args[@]}" \
   "adaptive-kernel=$CATS3D_KERNEL_FILE" \
   "smearfile=$CATS3D_SMEARING_FILE" \
+  "${simplex_args[@]}" \
   "output=$out_file"
